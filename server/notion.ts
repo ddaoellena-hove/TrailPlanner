@@ -5,7 +5,7 @@ import {
   isFullBlock,
   isNotionClientError,
 } from '@notionhq/client';
-import { CARNET_TITLE, type CarnetBlock, type Inline } from '../shared/carnet';
+import { CARNET_LEGACY_TITLE, CARNET_TITLE, type CarnetBlock, type Inline } from '../shared/carnet';
 import type { NotionExportRequest, NotionProject, Trip } from '../shared/schema';
 
 const MAX_BLOCKS_PER_REQUEST = 100;
@@ -179,13 +179,18 @@ export class NotionExporter {
   /** Cherche parmi les enfants du projet : un id stocké seul ne suffit pas pour vider une page. */
   private async findCarnet(projectPageId: string): Promise<string | null> {
     const children = await this.listChildren(projectPageId);
-    const carnet = children.find(
-      (block) =>
-        isFullBlock(block) &&
-        block.type === 'child_page' &&
-        block.child_page.title === CARNET_TITLE,
-    );
-    return carnet?.id ?? null;
+    for (const block of children) {
+      if (!isFullBlock(block) || block.type !== 'child_page') continue;
+      if (block.child_page.title === CARNET_TITLE) return block.id;
+      if (block.child_page.title === CARNET_LEGACY_TITLE) {
+        await this.notion.pages.update({
+          page_id: block.id,
+          properties: { title: { title: [{ text: { content: CARNET_TITLE } }] } },
+        });
+        return block.id;
+      }
+    }
+    return null;
   }
 
   private async replaceContent(pageId: string, blocks: BlockObjectRequest[]): Promise<void> {

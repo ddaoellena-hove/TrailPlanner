@@ -16,10 +16,57 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatDayCount } from '../../shared/format';
-import type { Trip } from '../../shared/schema';
-import { changeDates, countDays, countDroppedDays } from '../../shared/trip';
+import type { Place, Trip } from '../../shared/schema';
+import {
+  changeDates,
+  countDays,
+  countDroppedDays,
+  isRoundTrip,
+  setDestination,
+  setOrigin,
+} from '../../shared/trip';
 
 const MAX_TRIP_DAYS = 366;
+
+function TripEndField({
+  id,
+  label,
+  place,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  place: Place | undefined;
+  onChange: (place: Place | undefined) => void;
+}) {
+  return (
+    <div className="flex items-end gap-2">
+      <div className="min-w-0 flex-1">
+        <AddressField
+          key={place?.id}
+          id={id}
+          label={label}
+          initialValue={place?.name}
+          placeholder="Lyon"
+          onType={() => {}}
+          onSelect={({ label: name, location }) =>
+            onChange({ id: crypto.randomUUID(), type: 'poi', name, location })
+          }
+        />
+      </div>
+      {place && (
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={`Retirer ${label.toLowerCase()}`}
+          onClick={() => onChange(undefined)}
+        >
+          <X aria-hidden />
+        </Button>
+      )}
+    </div>
+  );
+}
 
 /** Champs du voyage, enregistrés quand on quitte le champ. */
 export function TripFields({ trip, onSave }: { trip: Trip; onSave: (trip: Trip) => void }) {
@@ -28,6 +75,7 @@ export function TripFields({ trip, onSave }: { trip: Trip; onSave: (trip: Trip) 
   const [endDate, setEndDate] = useState(trip.endDate);
   const [error, setError] = useState<string | null>(null);
   const [droppedDays, setDroppedDays] = useState(0);
+  const [separateArrival, setSeparateArrival] = useState(!isRoundTrip(trip));
 
   // Un « annuler » change le voyage de l'extérieur : les champs suivent.
   const [synced, setSynced] = useState(trip);
@@ -153,32 +201,31 @@ export function TripFields({ trip, onSave }: { trip: Trip; onSave: (trip: Trip) 
         </p>
       )}
 
-      <div className="flex items-end gap-2">
-        <div className="min-w-0 flex-1">
-          <AddressField
-            key={trip.destination?.id}
-            id="trip-destination"
-            label="Retour en fin de voyage"
-            initialValue={trip.destination?.name}
-            placeholder="Lyon"
-            onType={() => {}}
-            onSelect={({ label, location }) =>
-              onSave({
-                ...trip,
-                destination: { id: crypto.randomUUID(), type: 'poi', name: label, location },
-              })
-            }
+      <div className="grid gap-2">
+        <TripEndField
+          id="trip-origin"
+          label="Départ"
+          place={trip.origin}
+          onChange={(place) => onSave(setOrigin(trip, place))}
+        />
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="trip-same-arrival"
+            checked={!separateArrival}
+            onCheckedChange={(checked) => {
+              setSeparateArrival(checked !== true);
+              if (checked === true) onSave(setDestination(trip, trip.origin));
+            }}
           />
+          <Label htmlFor="trip-same-arrival">Arrivée identique au départ</Label>
         </div>
-        {trip.destination && (
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Retirer le retour"
-            onClick={() => onSave({ ...trip, destination: undefined })}
-          >
-            <X aria-hidden />
-          </Button>
+        {separateArrival && (
+          <TripEndField
+            id="trip-destination"
+            label="Arrivée"
+            place={isRoundTrip(trip) ? undefined : trip.destination}
+            onChange={(place) => onSave(setDestination(trip, place))}
+          />
         )}
       </div>
 

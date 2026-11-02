@@ -289,6 +289,20 @@ export function setStopStartTime(trip: Trip, stopId: string, startTime: string |
   };
 }
 
+/** Voyage en boucle : l'arrivée est le départ, ou n'a pas été choisie autrement. */
+export function isRoundTrip({ origin, destination }: Trip): boolean {
+  return !destination || destination.id === origin?.id;
+}
+
+/** Change le départ. Dans un voyage en boucle, l'arrivée suit. */
+export function setOrigin(trip: Trip, origin: Place | undefined): Trip {
+  return { ...trip, origin, destination: isRoundTrip(trip) ? origin : trip.destination };
+}
+
+export function setDestination(trip: Trip, destination: Place | undefined): Trip {
+  return { ...trip, destination };
+}
+
 export function setStopDuration(trip: Trip, stopId: string, durationMin: number | undefined): Trip {
   return {
     ...trip,

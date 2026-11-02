@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CARNET_TITLE, type CarnetBlock } from '../shared/carnet';
+import { CARNET_LEGACY_TITLE, CARNET_TITLE, type CarnetBlock } from '../shared/carnet';
 import type { Trip } from '../shared/schema';
 import { NotionExporter, toNotionBlocks } from './notion';
 
@@ -134,6 +134,22 @@ describe('export Notion', () => {
     expect(api.blocks.delete).toHaveBeenCalledExactlyOnceWith({ block_id: 'ancien' });
     expect(children.get('carnet')).toHaveLength(1);
     expect(children.get('projet')).toHaveLength(2);
+  });
+
+  it('reprend et renomme un carnet créé sous l’ancien nom de l’outil', async () => {
+    const { api } = fakeNotion({
+      projet: [{ id: 'carnet', type: 'child_page', title: CARNET_LEGACY_TITLE }],
+      carnet: [{ id: 'ancien', type: 'paragraph' }],
+    });
+    const known = { ...trip, notion: { projectPageId: 'projet' } };
+
+    const ids = await exporter(api).export(known, { mode: 'create' }, blocks, '');
+
+    expect(ids.itineraryPageId).toBe('carnet');
+    expect(api.pages.create).not.toHaveBeenCalled();
+    expect(api.pages.update).toHaveBeenCalledWith(
+      expect.objectContaining({ page_id: 'carnet' }),
+    );
   });
 
   it('ne vide jamais une autre sous-page, même avec un id stocké trompeur', async () => {

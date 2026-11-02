@@ -1,4 +1,4 @@
-# SPEC — Trailplan : planificateur local de road trip rando
+# SPEC — TrailPlanner : planificateur local de road trip rando
 
 > Version 1.0 — 2 novembre 2026 — Auteur : David Dao-Ellena
 > Destinataire : Claude Code. Ce document est la source de vérité fonctionnelle. En cas de doute, demander plutôt que supposer.
@@ -333,7 +333,7 @@ Voir §8.
 
 ### Règle de non-écrasement (critique)
 Les pages projet contiennent du contenu écrit à la main (objectif, réglementation, checklist…). **L'outil ne modifie jamais le contenu d'une page projet existante.** Il écrit exclusivement dans une **sous-page dédiée** qu'il possède :
-`🗺️ Carnet d'itinéraire — généré par Trailplan`
+`🗺️ Carnet d'itinéraire — généré par TrailPlanner`
 À chaque export, le contenu de cette sous-page est entièrement remplacé.
 
 ### Flux
@@ -350,7 +350,7 @@ Les pages projet contiennent du contenu écrit à la main (objectif, réglementa
 3. Une section `## J1 — titre` par jour : timeline (trajets avec durée, randos avec stats et lien AllTrails), nuit (lien, statut de réservation), replis.
 4. `## Hébergements` : tableau nom / nuits / prix / statut / chiens / lien.
 5. `## Points à vérifier` : to-do Notion générés à partir des alertes warning/error.
-6. Pied : « Généré automatiquement par Trailplan — ne pas éditer cette page, elle est remplacée à chaque export. »
+6. Pied : « Généré automatiquement par TrailPlanner — ne pas éditer cette page, elle est remplacée à chaque export. »
 
 ### Technique
 - `@notionhq/client` avec la version d'API qui supporte les data sources (parent = `data_source_id`). Vérifier la version courante dans la doc Notion.
@@ -446,13 +446,13 @@ Chaque jalon : tests unitaires des calculs touchés, lint et typecheck verts, RE
 ---
 
 ## 12. Questions ouvertes (à valider avec David, ne pas trancher seul)
-1. Nom définitif de l'outil (« Trailplan » est un nom de travail).
+1. ~~Nom définitif de l'outil.~~ Tranché par David : TrailPlanner.
 2. Fournir 3 GPX AllTrails de référence + leurs valeurs affichées (distance, D+) pour `fixtures/`.
 3. Faut-il aussi relier les randos à la base `Resources` du Life OS ? (Supposé : non en V1.)
 
 Relevées pendant M0, avec le choix provisoire appliqué en attendant la réponse :
 
-4. Départ retiré de E2 à la demande de David : `origin` et `destination` deviennent optionnels. Le départ se saisit maintenant sur la première étape (question 16) ; le retour final n'a pas encore de saisie.
+4. Départ retiré de E2 à la demande de David : `origin` et `destination` deviennent optionnels. Ils se saisissent désormais dans la page du voyage (question 29).
 5. E1 demande « dupliquer » mais §9 ne liste aucune route. (Provisoire : `POST /api/trips/:slug/duplicate` ajoutée ; la copie reprend GPX et cache mais pas le lien Notion, pour ne pas écraser le carnet de l'original.)
 6. `HikeStats` type les altitudes en `number` alors que §5.1 les veut à `null` sans altitude. (Provisoire : champs d'altitude et de dénivelé `nullable`, `profile[].altM` compris.)
 7. `Place.type` n'a pas de valeur pour `origin` / `destination`. Sans objet tant que le départ n'est pas saisi.
@@ -479,3 +479,4 @@ Mesure US2 (2 novembre 2026, sur un voyage réel) : survol du profil → point s
 26. Assistant de voyage : Claude Opus 5.5 via `ANTHROPIC_API_KEY`, côté serveur. Il ne peut que simuler et proposer des opérations limitées (`shared/assistant-ops.ts`) ; rien ne s'applique sans clic, et tout s'annule. Les conversations vivent en mémoire et disparaissent au redémarrage. Faut-il les conserver ? (Provisoire : non.)
 27. Second fournisseur pour l'assistant : OpenAI, via `OPENAI_API_KEY` et `OPENAI_MODEL`, sans modèle par défaut. Choix dans les Réglages quand deux sont configurés ; changer de fournisseur repart d'une conversation vide. Le coût n'est pas calculé pour OpenAI, faute de tarif fiable par modèle.
 28. Couches de carte : fond (Plan IGN, photos aériennes, OpenStreetMap) atténuable, couches IGN superposables (relief, pentes, courbes, eau, routes, traces hivernales) et éléments du voyage masquables. Réglages globaux, communs à tous les voyages. Faut-il des réglages par voyage ? (Provisoire : non.)
+29. Départ et arrivée : champs du voyage (`origin`, `destination`), avec « Arrivée identique au départ » coché par défaut. Le départ s'affiche au J1 et n'est pas une étape de séjour. Un `departurePlaceId` sur la première étape reste possible et prime sur `origin`.

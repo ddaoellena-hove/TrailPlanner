@@ -384,6 +384,16 @@ test('créer un voyage, le retrouver après rechargement, le dupliquer et le sup
   await page.getByRole('option', { name: 'J1' }).click();
   await expect(page.getByText('Profil du J1')).toBeVisible();
 
+  // Départ et arrivée : l'arrivée suit le départ, sauf si elle est décochée.
+  await page.locator('#trip-origin').fill('Gap');
+  await page.getByRole('listbox').getByRole('button', { name: 'Gap, 05000' }).click();
+  await expect(page.getByText('Départ : Gap, 05000')).toBeVisible();
+  await expect(page.getByText('Arrivée : Gap, 05000')).toBeVisible();
+  await expect(page.locator('#trip-destination')).toHaveCount(0);
+  await page.getByLabel('Arrivée identique au départ').click();
+  await expect(page.locator('#trip-destination')).toBeVisible();
+  await page.getByLabel('Arrivée identique au départ').click();
+
   await page.getByRole('link', { name: 'Mes voyages' }).click();
   await page.reload();
   await expect(page.getByRole('link', { name: 'Dévoluy & Champsaur 2027' })).toBeVisible();

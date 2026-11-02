@@ -111,6 +111,13 @@ export function DaySummary({
         }}
       />
 
+      {day.index === 1 && trip.origin && (
+        <p className="text-sm text-muted-foreground">Départ : {trip.origin.name}</p>
+      )}
+      {isLastDay && trip.destination && (
+        <p className="text-sm text-muted-foreground">Arrivée : {trip.destination.name}</p>
+      )}
+
       <p className="text-sm text-muted-foreground tabular-nums">
         {formatKm(totals.hikingKm)} · {formatElevationGain(totals.elevationGainM)} ·{' '}
         {formatDuration(totals.hikingMin)} de marche · {formatDuration(totals.drivingMin)} de route

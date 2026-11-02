@@ -73,7 +73,7 @@ describe('computeItinerary', () => {
   let trip: Trip;
 
   beforeEach(async () => {
-    dir = await mkdtemp(path.join(tmpdir(), 'trailplan-'));
+    dir = await mkdtemp(path.join(tmpdir(), 'trailplanner-'));
     store = new TripStore(dir);
     const created = await store.create({
       name: 'Test',

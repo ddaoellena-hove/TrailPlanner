@@ -14,9 +14,11 @@ import { daySun } from './sun';
 import { tripStats } from './totals';
 import { nightOf } from './trip';
 
-export const CARNET_TITLE = '🗺️ Carnet d’itinéraire — généré par Trailplan';
+export const CARNET_TITLE = '🗺️ Carnet d’itinéraire — généré par TrailPlanner';
+/** Titre d'avant le renommage de l'outil : ces carnets sont repris, pas dupliqués. */
+export const CARNET_LEGACY_TITLE = '🗺️ Carnet d’itinéraire — généré par Trailplan';
 export const CARNET_FOOTER =
-  'Généré automatiquement par Trailplan — ne pas éditer cette page, elle est remplacée à chaque export.';
+  'Généré automatiquement par TrailPlanner — ne pas éditer cette page, elle est remplacée à chaque export.';
 
 export type Inline = { text: string; url?: string };
 export type CarnetBlock =

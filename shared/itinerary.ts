@@ -94,7 +94,25 @@ export function plannedStops(trip: Trip): PlannedStop[] {
       ];
     });
     const night = placePosition(trip, day.nightPlaceId);
-    return night ? [...markers, marker(`night-${day.index}`, night)] : markers;
+    const lastDay = day.index === trip.days.at(-1)?.index;
+    const { origin, destination } = trip;
+    const round = destination && destination.id === origin?.id;
+    return [
+      ...(origin && day.index === 1
+        ? [marker('origin', { location: origin.location, name: origin.name, type: origin.type })]
+        : []),
+      ...markers,
+      ...(night ? [marker(`night-${day.index}`, night)] : []),
+      ...(destination && lastDay && !round
+        ? [
+            marker('destination', {
+              location: destination.location,
+              name: destination.name,
+              type: destination.type,
+            }),
+          ]
+        : []),
+    ];
   });
 }
 

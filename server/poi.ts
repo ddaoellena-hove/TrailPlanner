@@ -8,7 +8,7 @@ const OVERPASS_URLS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
 ];
-const USER_AGENT = 'Trailplan/0.1 (outil local personnel)';
+const USER_AGENT = 'TrailPlanner/0.1 (outil local personnel)';
 const TIMEOUT_MS = 20_000;
 const MAX_POIS = 300;
 const FRESH_MS = 7 * 24 * 60 * 60 * 1000;

@@ -163,6 +163,21 @@ describe('deriveLegs', () => {
 });
 
 describe('plannedStops', () => {
+  it('place le départ en premier et une arrivée distincte en dernier', () => {
+    const planned = addPlaceStop(
+      { ...trip, origin: place(gap, 'Départ'), destination: place(briancon, 'Arrivée') },
+      1,
+      place(trailEnd, 'Gîte'),
+    );
+    expect(plannedStops(planned).map(({ name }) => name)).toEqual(['Départ', 'Gîte', 'Arrivée']);
+  });
+
+  it('ne répète pas le départ pour un voyage en boucle', () => {
+    const home = place(gap, 'Maison');
+    const planned = { ...trip, origin: home, destination: home };
+    expect(plannedStops(planned).map(({ name }) => name)).toEqual(['Maison']);
+  });
+
   it('liste les étapes dans l’ordre, au point d’entrée', () => {
     const planned = addPlaceStop(addHikeStop(trip, 1, hike(gap, trailEnd)), 2, place(briancon, 'Gîte'));
     expect(plannedStops(planned).map(({ kind, location }) => [kind, location])).toEqual([

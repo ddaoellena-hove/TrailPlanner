@@ -1,4 +1,4 @@
-# Trailplan
+# TrailPlanner
 
 Outil local et mono-utilisateur pour préparer un road trip de plusieurs jours mêlant voiture et randonnées, à partir de GPX AllTrails. Il calcule la charge de chaque journée, signale ce qui ne tient pas et exporte un carnet dans le Life OS Notion.
 
@@ -47,7 +47,7 @@ L'e2e écrit dans `.e2e-trips/` et neutralise `NOTION_TOKEN`, `ORS_API_KEY`, `AN
 
 ## Fonctionnalités
 
-- **Voyages :** création, duplication, corbeille dans `trips/.trash`. Nom, dates, chien, voiture électrique et retour se modifient directement dans la page.
+- **Voyages :** création, duplication, corbeille dans `trips/.trash`. Nom, dates, chien, voiture électrique, départ et arrivée se modifient directement dans la page.
 - **Randos :** import de plusieurs GPX, fiche complète, remplacement du tracé sans perdre le planning. Le GPX original n'est jamais modifié.
 - **Planning :** étapes glissées dans un jour ou entre jours, trajets calculés dans la timeline, nuits, replis, notes, totaux et charge par jour. Annuler/rétablir sur 50 niveaux, `Ctrl/Cmd+S`.
 - **Étapes :** avec trail, ou de séjour avec autocomplétion d'adresse. Chacune a un départ, par défaut le séjour précédent, et un séjour avec lien.

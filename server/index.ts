@@ -47,5 +47,5 @@ const app = createApp({
 const port = Number(process.env.API_PORT ?? 5174);
 
 serve({ fetch: app.fetch, hostname: '127.0.0.1', port }, ({ address, port }) => {
-  console.log(`API Trailplan sur http://${address}:${port} (voyages : ${env.tripsDir})`);
+  console.log(`API TrailPlanner sur http://${address}:${port} (voyages : ${env.tripsDir})`);
 });

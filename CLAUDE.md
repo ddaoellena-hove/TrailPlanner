@@ -1,4 +1,4 @@
-# CLAUDE.md — Trailplan
+# CLAUDE.md — TrailPlanner
 
 Outil local de planification de road trips rando à partir de GPX AllTrails.
 **La spec fonctionnelle complète est dans `SPEC.md` : la lire avant toute tâche.**
@@ -24,7 +24,7 @@ trips/          données utilisateur (gitignored)
 - Les clés API (ORS, Notion) ne quittent jamais le serveur. Le serveur écoute sur 127.0.0.1 uniquement.
 - UI : shadcn/ui + Tailwind uniquement, icônes Lucide. Interface en français, formats FR.
 - Jamais de scraping AllTrails ni d'appel à son API interne.
-- Export Notion : ne jamais modifier le contenu d'une page projet existante, seulement la sous-page « Carnet d'itinéraire — généré par Trailplan » (voir SPEC §8).
+- Export Notion : ne jamais modifier le contenu d'une page projet existante, seulement la sous-page « Carnet d'itinéraire — généré par TrailPlanner » (voir SPEC §8).
 - Écritures disque atomiques ; ne jamais modifier un GPX original.
 - Un jalon (SPEC §11) = une branche + une PR. Lint, typecheck et tests verts avant PR.
 - En cas d'ambiguïté fonctionnelle : poser la question plutôt que supposer. Ajouter la question à SPEC §12.

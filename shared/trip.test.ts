@@ -23,13 +23,16 @@ import {
   directionsUrl,
   generateDays,
   insertChargeStop,
+  isRoundTrip,
   moveStop,
   nightOf,
   removeHike,
   removePlace,
   removeStop,
   replaceHikeTrack,
+  setDestination,
   setDogPolicies,
+  setOrigin,
   setStopDuration,
   setStopPlaces,
   slugify,
@@ -387,6 +390,25 @@ describe('traversées', () => {
     expect(stops[0]!.id).toBe(hikeStop!.id);
     expect(stops[2]!.id).toBe(stayStop!.id);
     expect(recovered.places.at(-1)).toMatchObject({ type: 'parking', location: start });
+  });
+});
+
+describe('départ et arrivée', () => {
+  const home = { ...place, id: randomUUID(), name: 'Maison' };
+  const other = { ...place, id: randomUUID(), name: 'Gare' };
+
+  it('fait suivre l’arrivée tant que le voyage est en boucle', () => {
+    const empty: Trip = { ...trip(), origin: undefined, destination: undefined };
+    const started = setOrigin(empty, home);
+    expect(started.destination).toEqual(home);
+    expect(isRoundTrip(started)).toBe(true);
+    expect(setOrigin(started, other).destination).toEqual(other);
+  });
+
+  it('garde une arrivée choisie quand le départ change', () => {
+    const open = setDestination(setOrigin(trip(), home), other);
+    expect(isRoundTrip(open)).toBe(false);
+    expect(setOrigin(open, { ...home, id: randomUUID() }).destination).toEqual(other);
   });
 });
 
