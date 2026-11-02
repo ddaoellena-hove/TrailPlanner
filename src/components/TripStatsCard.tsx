@@ -45,7 +45,7 @@ export function TripStatsCard({ trip, legs }: { trip: Trip; legs: ItineraryLeg[]
         <dl className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-4">
           {items.map(([label, value, Icon, tone]) => (
             <div key={label} data-testid={`stat-${label}`} className="flex items-start gap-2">
-              <span className={cn('rounded-md border p-1.5', TONE_ICON_CLASSES[tone])}>
+              <span className={cn('rounded-md p-1.5', TONE_ICON_CLASSES[tone])}>
                 <Icon className="size-4" aria-hidden />
               </span>
               <div className="min-w-0">

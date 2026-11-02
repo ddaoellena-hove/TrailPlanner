@@ -99,8 +99,7 @@ function DayCard({
     <Card
       ref={setNodeRef}
       id={`day-${day.index}`}
-      style={{ borderLeftColor: dayColor(day.index) }}
-      className={cn('scroll-mt-4 border-l-4', highlighted && 'ring-2 ring-primary')}
+      className={cn('scroll-mt-4', highlighted && 'ring-2 ring-primary')}
     >
       <CardHeader className="flex flex-row items-center justify-between gap-2">
         <CardTitle className="flex min-w-0 flex-wrap items-center gap-2 text-base">
