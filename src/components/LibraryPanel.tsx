@@ -2,6 +2,7 @@ import { useDraggable } from '@dnd-kit/core';
 import { CalendarPlus, Dog, GripVertical, Plus, Trash2, Upload } from 'lucide-react';
 import { type DragEvent, useState } from 'react';
 import { ChargingList } from '@/components/ChargingList';
+import { FavoriteStations } from '@/components/FavoriteStations';
 import { PlaceIcon } from '@/components/PlaceIcon';
 import { PoiList } from '@/components/PoiList';
 import { HikeBadges } from '@/components/StopDetails';
@@ -18,7 +19,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BOOKING_LABELS, DOG_LABELS, PLACE_TYPE_LABELS } from '@/lib/labels';
 import { cn } from '@/lib/utils';
 import { formatDay } from '../../shared/format';
-import type { ChargingStation, Hike, Place, PlaceType, Poi, Trip } from '../../shared/schema';
+import type {
+  FavoriteStation,
+  Hike,
+  Place,
+  PlaceType,
+  Poi,
+  Trip,
+} from '../../shared/schema';
 import { unplanned } from '../../shared/trip';
 
 export const libraryDragId = (hikeId: string) => `library-${hikeId}`;
@@ -195,7 +203,7 @@ export function LibraryPanel({
   onDeletePlace: (placeId: string) => void;
   chargingMinKw: number;
   onChargingMinKwChange: (minKw: number) => void;
-  onAddStation: (station: ChargingStation) => void;
+  onAddStation: (station: FavoriteStation) => void;
   poiRequested: boolean;
   onRequestPoi: () => void;
   onAddPoi: (poi: Poi) => void;
@@ -302,6 +310,7 @@ export function LibraryPanel({
               onRequest={onRequestPoi}
               onAdd={onAddPoi}
             />
+            {trip.travelers.electricVehicle && <FavoriteStations onAdd={onAddStation} />}
             {trip.travelers.electricVehicle && (
               <ChargingList
                 trip={trip}

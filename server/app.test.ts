@@ -255,6 +255,29 @@ describe('API voyages', () => {
     });
   });
 
+  it('conserve les bornes favorites dans les réglages', async () => {
+    const favoriteStations = [
+      {
+        id: 'FR1',
+        name: 'Borne',
+        address: '',
+        operator: '',
+        network: null,
+        location: { lat: 45, lng: 6 },
+        maxPowerKw: 0,
+        points: 0,
+        connectors: [],
+        hours: null,
+        url: 'https://maps.app.goo.gl/x',
+      },
+    ];
+    await request('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ ...DEFAULT_SETTINGS, favoriteStations }),
+    });
+    expect(await (await request('/api/settings')).json()).toMatchObject({ favoriteStations });
+  });
+
   it('refuse des réglages invalides', async () => {
     const response = await request('/api/settings', { method: 'PUT', body: '{"pace":{}}' });
     expect(response.status).toBe(400);

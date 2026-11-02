@@ -256,6 +256,10 @@ test('créer un voyage, le retrouver après rechargement, le dupliquer et le sup
   await page.getByRole('tab', { name: /Lieux/ }).click();
   await expect(page.getByLabel('Réseau favori')).toHaveCount(1);
   await expect(page.getByText("certaines zones n'ont pas répondu", { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Borne autre en favori' }).click();
+  await expect(page.getByText('Mes bornes favorites (1)')).toBeVisible();
+  await page.getByRole('button', { name: 'Retirer Borne autre des favoris' }).click();
+  await expect(page.getByText('Mes bornes favorites (0)')).toBeVisible();
   await page.getByLabel('Mes réseaux uniquement').click();
   await expect(page.getByRole('button', { name: 'Ajouter Borne autre au voyage' })).toBeHidden();
   await page.getByLabel('Mes réseaux uniquement').click();

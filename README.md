@@ -28,6 +28,7 @@ Le front est sur http://127.0.0.1:5173 et l'API sur le port 5174. L'app fonction
 | `ORS_API_KEY` | optionnelle : remplace l'IGN pour le routage |
 | `ANTHROPIC_API_KEY` | optionnelle : active l'assistant avec Claude, payant à l'usage |
 | `OPENAI_API_KEY`, `OPENAI_MODEL` | optionnelles : active l'assistant avec ChatGPT ; les deux sont nécessaires |
+| `OPENCHARGEMAP_API_KEY` | optionnelle : ajoute les bornes Electra |
 | `TRIPS_DIR` | dossier des voyages, `./trips` par défaut |
 | `SETTINGS_FILE` | fichier des réglages, `./settings.json` par défaut |
 
@@ -43,7 +44,7 @@ Le front est sur http://127.0.0.1:5173 et l'API sur le port 5174. L'app fonction
 | `npm run lint` / `npm run typecheck` | contrôles statiques |
 | `npm run build` | build du front |
 
-L'e2e écrit dans `.e2e-trips/` et neutralise `NOTION_TOKEN`, `ORS_API_KEY`, `ANTHROPIC_API_KEY` et `OPENAI_API_KEY` : il peut tourner à côté de `npm run dev` et ne touche jamais aux vrais services à clé. Il passe en revanche par l'IGN pour les trajets, donc il demande du réseau.
+L'e2e écrit dans `.e2e-trips/` et neutralise `NOTION_TOKEN`, `ORS_API_KEY`, `OPENCHARGEMAP_API_KEY`, `ANTHROPIC_API_KEY` et `OPENAI_API_KEY` : il peut tourner à côté de `npm run dev` et ne touche jamais aux vrais services à clé. Il passe en revanche par l'IGN pour les trajets, donc il demande du réseau.
 
 ## Fonctionnalités
 
@@ -53,7 +54,7 @@ L'e2e écrit dans `.e2e-trips/` et neutralise `NOTION_TOKEN`, `ORS_API_KEY`, `AN
 - **Étapes :** avec trail, ou de séjour avec autocomplétion d'adresse. Chacune a un départ, par défaut le séjour précédent, et un séjour avec lien.
 - **Carte :** fond Plan IGN, photos aériennes ou OpenStreetMap, atténuable, couches de terrain à superposer (relief, pentes, courbes, eau, routes, traces hivernales), éléments du voyage masquables, tracés colorés par jour, filtre par jour, trajet du trail à l'hôtel en violet, profil altimétrique synchronisé, ajout d'un lieu au clic droit.
 - **Lieux :** séjour, recharge, ravitaillement, parking, point d'intérêt. Ajout par adresse, par clic sur la carte ou par lien Google Maps.
-- **Voiture électrique :** bornes le long des trajets et autour des étapes, réseaux favoris mis en avant, insérées dans le planning avec leur pause.
+- **Voiture électrique :** bornes le long des trajets et autour des étapes, réseaux favoris mis en avant, bornes favorites communes à tous les voyages, insérées dans le planning avec leur pause.
 - **Lumière et météo :** lever et coucher du soleil, heure de départ par rando, prévisions à 16 jours.
 - **Points utiles :** eau, refuges, campings et parkings autour des randos.
 - **Préparation :** budget par poste et checklist adaptée au voyage.
@@ -93,6 +94,7 @@ Chaque voyage vit dans `trips/<slug>/` : `trip.json` lisible et diffable, `gpx/`
 | Géoplateforme IGN | fond de carte, géocodage, routage | non | France uniquement |
 | OpenRouteService | routage, si `ORS_API_KEY` existe | oui | jamais essayé avec une vraie clé |
 | Base nationale IRVE (data.gouv.fr) | bornes de recharge | non | France, données déclarées par les opérateurs, pas de disponibilité en temps réel |
+| Open Charge Map | bornes Electra | oui | une seule requête, gardée 6 h ; Plug Inn n'y figure pas |
 | Open-Meteo | météo | non | 16 jours |
 | Overpass (OpenStreetMap) | points utiles | non | serveurs publics souvent saturés |
 | Notion | export | oui | écrit uniquement côté serveur |

@@ -43,6 +43,7 @@ type AppOptions = {
   settingsFile?: string;
   health: () => Promise<Health> | Health;
   orsApiKey?: string;
+  openChargeMapKey?: string;
   notion?: NotionExporter;
   assistants?: AssistantProvider[];
 };
@@ -52,6 +53,7 @@ export function createApp({
   settingsFile,
   health,
   orsApiKey,
+  openChargeMapKey,
   notion,
   assistants = [],
 }: AppOptions) {
@@ -189,7 +191,7 @@ export function createApp({
     const lines = legs.map((leg) => leg.geometry.coordinates);
     const stops = plannedStops(trip).map(({ location }) => location);
     try {
-      return c.json(await findStations(lines, stops, minKw));
+      return c.json(await findStations(lines, stops, minKw, openChargeMapKey));
     } catch (error) {
       console.warn('Bornes indisponibles :', error);
       return c.json({ error: 'Service des bornes indisponible' }, 502);

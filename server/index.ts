@@ -34,6 +34,7 @@ const app = createApp({
   tripsDir: env.tripsDir,
   settingsFile: env.settingsFile,
   orsApiKey: env.orsApiKey,
+  openChargeMapKey: env.openChargeMapKey,
   notion,
   health: () =>
     (health ??= checkKeys(

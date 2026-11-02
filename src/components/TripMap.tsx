@@ -18,7 +18,7 @@ import { plannedStops } from '../../shared/itinerary';
 import { formatStation } from '@/lib/stations';
 import type { RankedStation } from '../../shared/charging-networks';
 import type {
-  ChargingStation,
+  FavoriteStation,
   Hike,
   ItineraryLeg,
   LatLng,
@@ -108,6 +108,8 @@ export function TripMap({
   onAddPlaceAt,
   onOpenPlace,
   stations,
+  favoriteStations,
+  onToggleFavorite,
   onAddStation,
   pois,
   onAddPoi,
@@ -124,13 +126,15 @@ export function TripMap({
   onAddPlaceAt: (location: LatLng) => void;
   onOpenPlace: (placeId: string) => void;
   stations: RankedStation[];
-  onAddStation: (station: ChargingStation) => void;
+  favoriteStations: FavoriteStation[];
+  onToggleFavorite: (station: FavoriteStation) => void;
+  onAddStation: (station: FavoriteStation) => void;
   pois: Poi[];
   onAddPoi: (poi: Poi) => void;
 }) {
   const mapRef = useRef<MapRef>(null);
   const [menuAt, setMenuAt] = useState<LatLng | null>(null);
-  const [openStation, setOpenStation] = useState<ChargingStation | null>(null);
+  const [openStation, setOpenStation] = useState<FavoriteStation | null>(null);
   const [openPoi, setOpenPoi] = useState<Poi | null>(null);
 
   const { planned, backups, loose, stops, colorOf, bounds } = useMemo(() => {
@@ -197,7 +201,7 @@ export function TripMap({
       ref={mapRef}
       initialViewState={bounds ? { bounds, fitBoundsOptions: FIT_OPTIONS } : FRANCE_VIEW}
       mapStyle={EMPTY_STYLE}
-      interactiveLayerIds={['hikes-hit', 'charging-stations', 'poi-points']}
+      interactiveLayerIds={['hikes-hit', 'charging-stations', 'favorite-stations', 'poi-points']}
       cursor={highlightedHikeId ? 'crosshair' : 'grab'}
       onMouseMove={(event) => {
         const hit = event.features?.find((feature) => feature.layer.id === 'hikes-hit');
@@ -207,7 +211,10 @@ export function TripMap({
       onClick={(event) => {
         const itemIn = (layer: string): unknown =>
           event.features?.find((feature) => feature.layer.id === layer)?.properties?.itemId;
-        setOpenStation(stations.find(({ id }) => id === itemIn('charging-stations')) ?? null);
+        const stationId = itemIn('favorite-stations') ?? itemIn('charging-stations');
+        setOpenStation(
+          [...favoriteStations, ...stations].find(({ id }) => id === stationId) ?? null,
+        );
         setOpenPoi(pois.find(({ id }) => id === itemIn('poi-points')) ?? null);
       }}
       onContextMenu={(event) => {
@@ -326,7 +333,10 @@ export function TripMap({
           }}
         />
       </Source>
-      <Source type="geojson" data={points(stations)}>
+      <Source
+        type="geojson"
+        data={points(stations.filter(({ starred }) => !starred))}
+      >
         <Layer
           id="charging-stations"
           type="circle"
@@ -336,6 +346,19 @@ export function TripMap({
             'circle-radius': ['case', ['get', 'favorite'], 6.5, 4.5],
             'circle-stroke-color': '#ffffff',
             'circle-stroke-width': 1.5,
+          }}
+        />
+      </Source>
+      <Source type="geojson" data={points(favoriteStations)}>
+        <Layer
+          id="favorite-stations"
+          type="circle"
+          layout={shown('stations')}
+          paint={{
+            'circle-color': '#eab308',
+            'circle-radius': 8,
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-width': 2,
           }}
         />
       </Source>
@@ -411,6 +434,19 @@ export function TripMap({
               }}
             >
               Ajouter au voyage
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-neutral-900"
+              onClick={() => {
+                setOpenStation(null);
+                onToggleFavorite(openStation);
+              }}
+            >
+              {favoriteStations.some(({ id }) => id === openStation.id)
+                ? 'Retirer des favoris'
+                : 'Ajouter aux favoris'}
             </Button>
           </div>
         </Popup>

@@ -62,7 +62,7 @@ Aujourd'hui, l'utilisateur prépare ses voyages à la main dans Notion : un tabl
 | Backend | Node + Hono | Sert l'API locale, détient les clés, écrit les fichiers. |
 | Notion | `@notionhq/client` (officiel) | Appels **uniquement côté serveur** : l'API Notion refuse les appels navigateur. |
 | Routage | OpenRouteService Directions API, profil `driving-car` | Clé gratuite dans `.env`. |
-| Bornes de recharge | Base nationale IRVE (data.gouv.fr, API tabulaire) | Sans clé, France uniquement, mise à jour quotidienne. |
+| Bornes de recharge | Base nationale IRVE (data.gouv.fr, API tabulaire) ; Open Charge Map pour Electra | IRVE sans clé, France uniquement, mise à jour quotidienne. Open Charge Map optionnel, avec `OPENCHARGEMAP_API_KEY`. |
 | Tests | Vitest (unitaires) + Playwright (1 parcours e2e) | |
 | Lancement | `npm run dev` lance front + back (concurrently) | Ports par défaut : web 5173, api 5174. |
 
@@ -480,4 +480,5 @@ Mesure US2 (2 novembre 2026, sur un voyage réel) : survol du profil → point s
 27. Second fournisseur pour l'assistant : OpenAI, via `OPENAI_API_KEY` et `OPENAI_MODEL`, sans modèle par défaut. Choix dans les Réglages quand deux sont configurés ; changer de fournisseur repart d'une conversation vide. Le coût n'est pas calculé pour OpenAI, faute de tarif fiable par modèle.
 28. Couches de carte : fond (Plan IGN, photos aériennes, OpenStreetMap) atténuable, couches IGN superposables (relief, pentes, courbes, eau, routes, traces hivernales) et éléments du voyage masquables. Réglages globaux, communs à tous les voyages. Faut-il des réglages par voyage ? (Provisoire : non.)
 29. Départ et arrivée : champs du voyage (`origin`, `destination`), avec « Arrivée identique au départ » coché par défaut. Le départ s'affiche au J1 et n'est pas une étape de séjour. Un `departurePlaceId` sur la première étape reste possible et prime sur `origin`.
-30. Réseaux de recharge favoris : IONITY, Izivia, Mobilize, Sowatt, Le Plein, tirés de la liste Google Maps de David. Plug Inn et Electra sont absents de la base IRVE (vérifié par opérateur, enseigne, aménageur, station, contact et identifiant) : leurs bornes s'ajoutent par lien Google Maps. « Le Plein » ne correspond dans la base qu'à « Le Plein Tarnais » : à confirmer. Faut-il une autre source pour les deux absents ? (Provisoire : non, Overpass étant injoignable aux essais et Open Charge Map demandant une clé.)
+30. Réseaux de recharge favoris : IONITY, Izivia, Mobilize, Sowatt, Le Plein et Electra, tirés de la liste Google Maps de David. Electra, absent de la base IRVE, vient d'Open Charge Map (`OPENCHARGEMAP_API_KEY`). Plug Inn n'est ni dans IRVE ni dans Open Charge Map : ses bornes s'ajoutent par lien Google Maps. « Le Plein » ne correspond dans la base qu'à « Le Plein Tarnais » : à confirmer.
+31. Bornes favorites : étoile par borne, ou ajout par lien Google Maps (pour Plug Inn et Electra), conservées dans `settings.json`, donc communes à tous les voyages et affichées partout sur la carte en voiture électrique. Elles passent devant les réseaux favoris.

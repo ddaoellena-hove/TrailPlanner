@@ -42,8 +42,8 @@ import { type AssistantOp, applyOps } from '../../shared/assistant-ops';
 import { formatClock } from '../../shared/format';
 import { emptyHistory, record, redo, undo } from '../../shared/history';
 import type {
-  ChargingStation,
   Day,
+  FavoriteStation,
   Hike,
   LatLng,
   Place,
@@ -265,7 +265,7 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
     return null;
   };
 
-  const addStation = (station: ChargingStation) => setCharging({ station });
+  const addStation = (station: FavoriteStation) => setCharging({ station });
 
   const addPoi = (poi: Poi) => {
     if (trip.places.some(({ name }) => name === poi.name)) {

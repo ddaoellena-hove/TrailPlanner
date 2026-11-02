@@ -95,6 +95,7 @@ export function useRankedStations(trip: Trip, minKw: number) {
     query.data?.stations ?? [],
     settings.favoriteNetworks ?? DEFAULT_FAVORITE_NETWORKS,
     settings.favoriteNetworksOnly ?? false,
+    (settings.favoriteStations ?? []).map(({ id }) => id),
   );
   return { ...query, stations };
 }

@@ -2,8 +2,8 @@ import type { ChargingStation } from '../../shared/schema';
 
 export function formatStation({ maxPowerKw, points, connectors, operator }: ChargingStation): string {
   return [
-    `${Math.round(maxPowerKw)} kW`,
-    `${points} ${points > 1 ? 'points' : 'point'}`,
+    ...(maxPowerKw > 0 ? [`${Math.round(maxPowerKw)} kW`] : []),
+    ...(points > 0 ? [`${points} ${points > 1 ? 'points' : 'point'}`] : []),
     ...(connectors.length > 0 ? [connectors.join(', ')] : []),
     ...(operator ? [operator] : []),
   ].join(' · ');

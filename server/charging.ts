@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { type Box, corridorBoxes } from '../shared/charging';
 import { stationNetwork } from '../shared/charging-networks';
+import { clearElectraCache, electraStations } from './charging-electra';
 import type { ChargingSearch, ChargingStation, LatLng } from '../shared/schema';
 
 /** Le fichier national est republié sous un nouvel identifiant : on part toujours du jeu de données. */
@@ -117,6 +118,7 @@ const boxCache = new Map<string, { at: number; rows: Row[] }>();
 let workingResource: string | null = null;
 
 export function clearChargingCache(): void {
+  clearElectraCache();
   boxCache.clear();
   workingResource = null;
 }
@@ -184,16 +186,35 @@ async function fetchFromLatestResource(boxes: Box[], minKw: number) {
   throw new Error('IRVE : aucun fichier disponible');
 }
 
+/** Une panne d'Open Charge Map rend la liste partielle, sans priver des autres bornes. */
+async function electraInBoxes(apiKey: string, boxes: Box[]): Promise<ChargingStation[] | null> {
+  try {
+    const all = await electraStations(apiKey);
+    return all.filter(({ location: { lat, lng } }) =>
+      boxes.some(
+        (box) => lat >= box.south && lat <= box.north && lng >= box.west && lng <= box.east,
+      ),
+    );
+  } catch (error) {
+    console.warn('Bornes Electra indisponibles :', error);
+    return null;
+  }
+}
+
 /** Bornes des zones traversées, regroupées par station, les plus puissantes d'abord. */
 export async function findStations(
   lines: number[][][],
   stops: LatLng[],
   minKw: number,
+  openChargeMapKey?: string,
 ): Promise<ChargingSearch> {
   const boxes = corridorBoxes(lines, stops);
   if (boxes.length === 0) return { stations: [], incomplete: false };
   const { rows, failed } = await fetchFromLatestResource(boxes, minKw);
-  if (failed === boxes.length) throw new Error('IRVE : aucune zone n’a répondu');
+  const electra = openChargeMapKey ? await electraInBoxes(openChargeMapKey, boxes) : null;
+  if (failed === boxes.length && !electra?.length) {
+    throw new Error('IRVE : aucune zone n’a répondu');
+  }
 
   const byStation = new Map<string, Map<string, Row>>();
   for (const row of rows) {
@@ -203,9 +224,11 @@ export async function findStations(
     station.set(JSON.stringify(row), row);
     byStation.set(row.id_station_itinerance, station);
   }
-  const stations: ChargingStation[] = [...byStation.values()]
-    .map((station) => toStation([...station.values()]))
+  const stations: ChargingStation[] = [
+    ...[...byStation.values()].map((station) => toStation([...station.values()])),
+    ...(electra ?? []),
+  ]
     .filter((station) => station.maxPowerKw >= minKw)
     .sort((a, b) => b.maxPowerKw - a.maxPowerKw);
-  return { stations, incomplete: failed > 0 };
+  return { stations, incomplete: failed > 0 || (openChargeMapKey !== undefined && !electra) };
 }

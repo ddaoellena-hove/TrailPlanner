@@ -4,13 +4,15 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useRankedStations, useSaveSettings, useSettings } from '@/lib/hooks';
+import { cn } from '@/lib/utils';
+import { toggleFavoriteStation } from '../../shared/charging-networks';
 import { formatStation } from '@/lib/stations';
-import type { ChargingStation, Trip } from '../../shared/schema';
+import type { FavoriteStation, Trip } from '../../shared/schema';
 
 const POWER_OPTIONS = { '50': 'Rapides (50 kW et plus)', '22': '22 kW et plus', '0': 'Toutes' };
 const LIST_LIMIT = 20;
 
-/** Bornes de la base nationale IRVE, le long des trajets et autour des étapes. */
+/** Bornes de la base nationale IRVE et d'Electra, le long des trajets et autour des étapes. */
 export function ChargingList({
   trip,
   minKw,
@@ -20,7 +22,7 @@ export function ChargingList({
   trip: Trip;
   minKw: number;
   onMinKwChange: (minKw: number) => void;
-  onAdd: (station: ChargingStation) => void;
+  onAdd: (station: FavoriteStation) => void;
 }) {
   const stations = useRankedStations(trip, minKw);
   const settings = useSettings();
@@ -71,10 +73,13 @@ export function ChargingList({
       )}
       {shown.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          {stations.stations.length} bornes sur la carte : orange pour vos réseaux, vert pour les
-          autres
+          {stations.stations.length} bornes sur la carte : étoiles jaunes pour vos favorites, orange pour vos
+          réseaux, vert pour les autres
           {stations.stations.length > LIST_LIMIT && ` · les ${LIST_LIMIT} premières ici`}
         </p>
+      )}
+      {stations.stations.some(({ id }) => id.startsWith('ocm-')) && (
+        <p className="text-xs text-muted-foreground">Bornes Electra : Open Charge Map.</p>
       )}
       <ul className="grid gap-2">
         {shown.map((station) => (
@@ -82,8 +87,9 @@ export function ChargingList({
             <div className="min-w-0">
               <p className="flex items-center gap-1 font-medium">
                 {station.favorite && (
-                  <Star
-                    className="size-3.5 shrink-0 fill-amber-500 text-amber-500"
+                  <span
+                    className="size-2 shrink-0 rounded-full bg-orange-600"
+                    role="img"
                     aria-label="Réseau favori"
                   />
                 )}
@@ -91,15 +97,38 @@ export function ChargingList({
               </p>
               <p className="text-xs text-muted-foreground">{formatStation(station)}</p>
             </div>
-            <Button
-              variant="outline"
-              size="icon"
-              className="size-8 shrink-0"
-              aria-label={`Ajouter ${station.name} au voyage`}
-              onClick={() => onAdd(station)}
-            >
-              <Plus aria-hidden />
-            </Button>
+            <span className="flex shrink-0 gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                aria-pressed={station.starred}
+                aria-label={`${station.name} en favori`}
+                onClick={() =>
+                  save.mutate({
+                    ...settings,
+                    favoriteStations: toggleFavoriteStation(
+                      settings.favoriteStations ?? [],
+                      station,
+                    ),
+                  })
+                }
+              >
+                <Star
+                  className={cn(station.starred && 'fill-yellow-500 text-yellow-500')}
+                  aria-hidden
+                />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-8"
+                aria-label={`Ajouter ${station.name} au voyage`}
+                onClick={() => onAdd(station)}
+              >
+                <Plus aria-hidden />
+              </Button>
+            </span>
           </li>
         ))}
       </ul>

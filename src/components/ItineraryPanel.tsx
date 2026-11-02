@@ -11,6 +11,7 @@ import { api } from '@/lib/api';
 import {
   itineraryKey,
   useRankedStations,
+  useSaveSettings,
   useItinerary,
   usePois,
   useSettings,
@@ -19,9 +20,10 @@ import { TRAIL_TO_STAY_COLOR } from '@/lib/labels';
 import { mapViewOf } from '@/lib/map-layers';
 import { cn } from '@/lib/utils';
 import { formatDuration, formatKm } from '../../shared/format';
+import { toggleFavoriteStation } from '../../shared/charging-networks';
 import { itineraryTotals } from '../../shared/itinerary';
 import { buildProfile, nearestPointIndex } from '../../shared/profile';
-import type { ChargingStation, LatLng, Poi, Trip } from '../../shared/schema';
+import type { FavoriteStation, LatLng, Poi, Trip } from '../../shared/schema';
 
 export function ItineraryPanel({
   trip,
@@ -44,7 +46,7 @@ export function ItineraryPanel({
   onAddPlaceAt: (location: LatLng) => void;
   onOpenPlace: (placeId: string) => void;
   chargingMinKw: number;
-  onAddStation: (station: ChargingStation) => void;
+  onAddStation: (station: FavoriteStation) => void;
   poiRequested: boolean;
   onAddPoi: (poi: Poi) => void;
 }) {
@@ -53,6 +55,8 @@ export function ItineraryPanel({
   const itinerary = useItinerary(trip);
   const stations = useRankedStations(trip, chargingMinKw);
   const pois = usePois(trip, poiRequested);
+  const saveSettings = useSaveSettings();
+  const favorites = settings.favoriteStations ?? [];
   const [hoveredHikeId, setHoveredHikeId] = useState<string | null>(null);
   const [cursorIndex, setCursorIndex] = useState<number | null>(null);
 
@@ -143,6 +147,13 @@ export function ItineraryPanel({
           onAddPlaceAt={onAddPlaceAt}
           onOpenPlace={onOpenPlace}
           stations={trip.travelers.electricVehicle ? stations.stations : []}
+          favoriteStations={trip.travelers.electricVehicle ? favorites : []}
+          onToggleFavorite={(station) =>
+            saveSettings.mutate({
+              ...settings,
+              favoriteStations: toggleFavoriteStation(favorites, station),
+            })
+          }
           onAddStation={onAddStation}
           pois={pois.data ?? []}
           onAddPoi={onAddPoi}

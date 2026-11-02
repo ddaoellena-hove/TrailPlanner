@@ -17,6 +17,7 @@ export default defineConfig({
       // Vides, ces variables priment sur .env : l'e2e ne touche jamais aux vrais services à clé.
       NOTION_TOKEN: '',
       ORS_API_KEY: '',
+      OPENCHARGEMAP_API_KEY: '',
       ANTHROPIC_API_KEY: '',
       OPENAI_API_KEY: '',
       WEB_PORT,

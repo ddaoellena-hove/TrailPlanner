@@ -25,7 +25,7 @@ import { ASSISTANT_LABELS } from '@/lib/labels';
 import {
   CHARGING_NETWORKS,
   DEFAULT_FAVORITE_NETWORKS,
-  NETWORKS_NOT_IN_IRVE,
+  NETWORKS_WITHOUT_SOURCE,
 } from '../../shared/charging-networks';
 import { formatDuration } from '../../shared/format';
 import { estimateDurationMin } from '../../shared/gpx';
@@ -231,8 +231,8 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              {NETWORKS_NOT_IN_IRVE.join(' et ')} ne sont pas dans la base nationale : ajoutez leurs
-              bornes par lien Google Maps.
+              {NETWORKS_WITHOUT_SOURCE.join(' et ')} n'a pas de source automatique : ajoutez ses
+              bornes par lien Google Maps. Electra demande OPENCHARGEMAP_API_KEY.
             </p>
           </section>
 

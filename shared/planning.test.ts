@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { tripBudget } from './budget';
 import { corridorBoxes, MAX_BOXES } from './charging';
-import { rankStations, stationNetwork } from './charging-networks';
+import {
+  rankStations,
+  stationFromLink,
+  stationNetwork,
+  toggleFavoriteStation,
+} from './charging-networks';
 import { checklistSuggestions } from './checklist';
 import { forecastAvailableFrom, formatWeather, isForecastable } from './weather';
 import { parseMapLink } from './map-link';
@@ -387,6 +392,33 @@ describe('réseaux favoris', () => {
 
   it('filtre sur les seuls favoris', () => {
     expect(rankStations(stations, ['izivia'], true).map(({ id }) => id)).toEqual(['izivia']);
+  });
+
+  it('place les bornes étoilées avant les réseaux, même avec le filtre', () => {
+    const ranked = rankStations(stations, ['ionity'], true, ['rapide']);
+    expect(ranked.map(({ id }) => id)).toEqual(['rapide', 'ionity']);
+    expect(ranked[0]?.starred).toBe(true);
+  });
+
+  it('ajoute puis retire une borne des favoris', () => {
+    const added = toggleFavoriteStation([], stations[0]!);
+    expect(added).toHaveLength(1);
+    expect(toggleFavoriteStation(added, stations[0]!)).toEqual([]);
+  });
+
+  it('crée une borne depuis un lien, sans inventer de puissance', () => {
+    const link = {
+      name: 'Electra',
+      location: { lat: 45, lng: 6 },
+      url: 'https://maps.app.goo.gl/x',
+      approximate: false,
+    };
+    expect(stationFromLink(link, 'Electra Gap', 'id')).toMatchObject({
+      name: 'Electra Gap',
+      maxPowerKw: 0,
+      network: null,
+      url: link.url,
+    });
   });
 
   it('ne marque rien sans favori', () => {

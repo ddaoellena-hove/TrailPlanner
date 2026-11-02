@@ -380,6 +380,81 @@ describe('findStations', () => {
     expect(fetchMock.mock.calls.some(([url]) => url.includes('/ancien/'))).toBe(true);
   });
 
+  const electraPoi = {
+    ID: 7,
+    NumberOfPoints: 6,
+    AddressInfo: { Title: 'Electra - Gap', Town: 'Gap', Latitude: 44.56, Longitude: 6.08 },
+    Connections: [
+      { PowerKW: 300, Quantity: 4, ConnectionType: { Title: 'CCS (Type 2)' } },
+      { PowerKW: 22, Quantity: 2, ConnectionType: { Title: 'Type 2 (Socket Only)' } },
+    ],
+  };
+  const farPoi = {
+    ...electraPoi,
+    ID: 8,
+    AddressInfo: { ...electraPoi.AddressInfo, Latitude: 48.85, Longitude: 2.35 },
+  };
+  const withElectra = (poi: () => Response) =>
+    vi.fn(async (url: string) => {
+      if (url.includes('openchargemap')) return poi();
+      if (url.includes('/datasets/')) return json(dataset);
+      return json({ data: [], meta: {} });
+    });
+
+  it('ajoute les stations Electra des zones du voyage, sans les autres', async () => {
+    vi.stubGlobal('fetch', withElectra(() => json([electraPoi, farPoi])));
+    const { stations, incomplete } = await findStations([], [two[0]!], 50, 'cle');
+    expect(incomplete).toBe(false);
+    expect(stations).toEqual([
+      expect.objectContaining({
+        id: 'ocm-7',
+        name: 'Electra - Gap',
+        network: 'electra',
+        maxPowerKw: 300,
+        points: 6,
+        connectors: ['CCS', 'Type 2'],
+      }),
+    ]);
+  });
+
+  it('envoie la clé en en-tête, et ne rappelle pas Electra pour chaque recherche', async () => {
+    const fetchMock = withElectra(() => json([electraPoi]));
+    vi.stubGlobal('fetch', fetchMock);
+    await findStations([], [two[0]!], 0, 'cle');
+    await findStations([], [two[1]!], 0, 'cle');
+    const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
+    const ocm = calls.filter(([url]) => url.includes('openchargemap'));
+    expect(ocm).toHaveLength(1);
+    expect(ocm[0]![0]).not.toContain('cle');
+    expect(ocm[0]![1].headers).toMatchObject({ 'x-api-key': 'cle' });
+  });
+
+  it('applique le filtre de puissance à Electra', async () => {
+    vi.stubGlobal('fetch', withElectra(() => json([electraPoi])));
+    expect((await findStations([], [two[0]!], 350, 'cle')).stations).toEqual([]);
+  });
+
+  it('n’appelle pas Open Charge Map sans clé', async () => {
+    const fetchMock = withElectra(() => json([electraPoi]));
+    vi.stubGlobal('fetch', fetchMock);
+    await findStations([], [two[0]!], 0);
+    expect(fetchMock.mock.calls.some(([url]) => url.includes('openchargemap'))).toBe(false);
+  });
+
+  it('garde les autres bornes si Open Charge Map tombe, et le signale', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('openchargemap')) return json({}, 500);
+        if (url.includes('/datasets/')) return json(dataset);
+        return json({ data: [row({})], meta: {} });
+      }),
+    );
+    const result = await findStations([], [two[0]!], 0, 'cle');
+    expect(result.incomplete).toBe(true);
+    expect(result.stations.map(({ id }) => id)).toEqual(['FR1']);
+  });
+
   it('signale l’échec si aucun fichier ne répond', async () => {
     vi.stubGlobal(
       'fetch',

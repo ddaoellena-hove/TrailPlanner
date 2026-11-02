@@ -204,8 +204,34 @@ export type Itinerary = z.infer<typeof ItinerarySchema>;
 export const GeocodeResultSchema = z.object({ label: z.string(), location: LatLngSchema });
 export type GeocodeResult = z.infer<typeof GeocodeResultSchema>;
 
+export const MapLinkResultSchema = z.object({
+  name: z.string(),
+  location: LatLngSchema,
+  url: z.string(),
+  approximate: z.boolean(),
+});
+export type MapLinkResult = z.infer<typeof MapLinkResultSchema>;
+
 export const AssistantProviderIdSchema = z.enum(['anthropic', 'openai']);
 export type AssistantProviderId = z.infer<typeof AssistantProviderIdSchema>;
+
+export const ChargingStationSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  address: z.string(),
+  operator: z.string(),
+  network: z.string().nullable().optional(),
+  location: LatLngSchema,
+  maxPowerKw: z.number().nonnegative(),
+  points: z.number().int().nonnegative(),
+  connectors: z.array(z.string()),
+  hours: z.string().nullable(),
+});
+export type ChargingStation = z.infer<typeof ChargingStationSchema>;
+
+/** Borne gardée d'un voyage à l'autre : issue de la base nationale, ou d'un lien Google Maps. */
+export const FavoriteStationSchema = ChargingStationSchema.extend({ url: z.string().optional() });
+export type FavoriteStation = z.infer<typeof FavoriteStationSchema>;
 
 export const SettingsSchema = z.object({
   pace: z.object({
@@ -231,22 +257,9 @@ export const SettingsSchema = z.object({
   assistantProvider: z.enum(['anthropic', 'openai']).optional(),
   favoriteNetworks: z.array(z.string()).optional(),
   favoriteNetworksOnly: z.boolean().optional(),
+  favoriteStations: z.array(FavoriteStationSchema).optional(),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
-
-export const ChargingStationSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  address: z.string(),
-  operator: z.string(),
-  network: z.string().nullable().optional(),
-  location: LatLngSchema,
-  maxPowerKw: z.number().nonnegative(),
-  points: z.number().int().nonnegative(),
-  connectors: z.array(z.string()),
-  hours: z.string().nullable(),
-});
-export type ChargingStation = z.infer<typeof ChargingStationSchema>;
 
 /** `incomplete` : des zones n'ont pas répondu, la liste peut être partielle. */
 export const ChargingSearchSchema = z.object({
@@ -276,14 +289,6 @@ export const PoiSchema = z.object({
   location: LatLngSchema,
 });
 export type Poi = z.infer<typeof PoiSchema>;
-
-export const MapLinkResultSchema = z.object({
-  name: z.string(),
-  location: LatLngSchema,
-  url: z.string(),
-  approximate: z.boolean(),
-});
-export type MapLinkResult = z.infer<typeof MapLinkResultSchema>;
 
 export const NotionExportRequestSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('create') }),

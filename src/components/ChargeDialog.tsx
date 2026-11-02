@@ -12,10 +12,15 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useRankedStations } from '@/lib/hooks';
+import { useRankedStations, useSettings } from '@/lib/hooks';
 import { formatStation, stationNotes } from '@/lib/stations';
 import { distanceKm } from '../../shared/charging';
-import type { ChargingStation, MapLinkResult, Place, Trip } from '../../shared/schema';
+import type {
+  FavoriteStation,
+  MapLinkResult,
+  Place,
+  Trip,
+} from '../../shared/schema';
 import { type StopSlot, stopSlots } from '../../shared/trip';
 
 const NO_SLOT = 'none';
@@ -23,7 +28,7 @@ const DEFAULT_PAUSE_MIN = 30;
 const LIST_LIMIT = 40;
 
 /** Ouverture depuis une étape (`slotKey`) ou depuis une borne (`station`). */
-export type ChargeTarget = { slotKey?: string; station?: ChargingStation };
+export type ChargeTarget = { slotKey?: string; station?: FavoriteStation };
 
 type Option = {
   key: string;
@@ -31,25 +36,26 @@ type Option = {
   toPlace: () => Place;
   km: number | null;
   favorite: boolean;
-  /** Déjà dans le voyage, puis réseau favori, puis le reste. */
+  /** Déjà dans le voyage, puis borne favorite, puis réseau favori, puis le reste. */
   rank: number;
 };
 
-function stationPlace(station: ChargingStation): Place {
+function stationPlace(station: FavoriteStation): Place {
   return {
     id: crypto.randomUUID(),
     type: 'charging',
     name: station.name,
     location: station.location,
+    ...(station.url ? { url: station.url } : {}),
     notes: stationNotes(station),
   };
 }
 
-function favoriteRank(favorite: boolean) {
-  return { favorite, rank: favorite ? 1 : 0 };
+function favoriteRank(isStarred: boolean, isNetwork: boolean) {
+  return { favorite: isStarred || isNetwork, rank: isStarred ? 2 : isNetwork ? 1 : 0 };
 }
 
-function nearestSlot(slots: StopSlot[], station: ChargingStation): StopSlot | undefined {
+function nearestSlot(slots: StopSlot[], station: FavoriteStation): StopSlot | undefined {
   return slots
     .filter((slot) => slot.location)
     .toSorted(
@@ -72,6 +78,7 @@ export function ChargeDialog({
   onConfirm: (place: Place, slot: StopSlot | null, durationMin: number | undefined) => void;
 }) {
   const stations = useRankedStations(trip, minKw);
+  const starred = useSettings().favoriteStations ?? [];
   const slots = stopSlots(trip);
   const [slotKey, setSlotKey] = useState(
     target.slotKey ??
@@ -95,8 +102,11 @@ export function ChargeDialog({
   const knownNames = new Set(known.map(({ name }) => name));
   const candidates = [
     ...(target.station ? [target.station] : []),
-    ...stations.stations.filter(({ id }) => id !== target.station?.id),
-  ].filter(({ name }) => !knownNames.has(name));
+    ...starred,
+    ...stations.stations,
+  ]
+    .filter(({ name }) => !knownNames.has(name))
+    .filter(({ id }, index, list) => list.findIndex((other) => other.id === id) === index);
 
   const options: Option[] = [
     ...known.map((place) => ({
@@ -105,14 +115,17 @@ export function ChargeDialog({
       toPlace: () => place,
       km: kmFrom(place.location),
       favorite: false,
-      rank: 2,
+      rank: 3,
     })),
     ...candidates.map((station) => ({
       key: `station:${station.id}`,
       label: `${station.name} · ${formatStation(station)}`,
       toPlace: () => stationPlace(station),
       km: kmFrom(station.location),
-      ...favoriteRank(stations.stations.some(({ id, favorite }) => id === station.id && favorite)),
+      ...favoriteRank(
+        starred.some(({ id }) => id === station.id),
+        stations.stations.some(({ id, favorite }) => id === station.id && favorite),
+      ),
     })),
   ]
     .toSorted(
