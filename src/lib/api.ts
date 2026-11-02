@@ -1,14 +1,24 @@
 import { z } from 'zod';
+import type { Proposal } from '../../shared/plan-impact';
+import { ProposalSchema } from '../../shared/plan-impact';
 import {
+  type ChargingStation,
+  ChargingStationSchema,
+  type DayWeather,
+  DayWeatherSchema,
   type GeocodeResult,
   GeocodeResultSchema,
   type Health,
   HealthSchema,
   type Hike,
   HikeSchema,
+  type MapLinkResult,
+  MapLinkResultSchema,
   type Itinerary,
   ItinerarySchema,
   type NewTrip,
+  type Poi,
+  PoiSchema,
   type NotionExportRequest,
   type NotionPreview,
   NotionPreviewSchema,
@@ -21,6 +31,19 @@ import {
   type TripSummary,
   TripSummarySchema,
 } from '../../shared/schema';
+
+const AssistantEventSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('text'), text: z.string() }),
+  z.object({ type: z.literal('status'), text: z.string() }),
+  z.object({ type: z.literal('proposal'), proposal: ProposalSchema }),
+  z.object({ type: z.literal('error'), message: z.string() }),
+  z.object({
+    type: z.literal('done'),
+    usage: z.object({ costUsd: z.number().nullable() }).loose(),
+  }),
+]);
+export type AssistantEvent = z.infer<typeof AssistantEventSchema>;
+export type { Proposal };
 
 async function request(route: string, init?: RequestInit): Promise<Response> {
   const response = await fetch(`/api${route}`, init);
@@ -105,6 +128,54 @@ export const api = {
   async notionProjects(query: string): Promise<NotionProject[]> {
     const response = await request(`/notion/projects?q=${encodeURIComponent(query)}`);
     return z.array(NotionProjectSchema).parse(await response.json());
+  },
+
+  async chargingStations(slug: string, minKw: number): Promise<ChargingStation[]> {
+    const response = await request(`/trips/${slug}/charging?minKw=${minKw}`);
+    return z.array(ChargingStationSchema).parse(await response.json());
+  },
+
+  async resolveMapLink(url: string): Promise<MapLinkResult> {
+    const response = await request('/map-link', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    return MapLinkResultSchema.parse(await response.json());
+  },
+
+  async weather(slug: string): Promise<Record<string, DayWeather>> {
+    const response = await request(`/trips/${slug}/weather`);
+    return z.record(z.string(), DayWeatherSchema).parse(await response.json());
+  },
+
+  async pois(slug: string): Promise<Poi[]> {
+    return z.array(PoiSchema).parse(await (await request(`/trips/${slug}/poi`)).json());
+  },
+
+  /** Lit la réponse ligne par ligne, au fil de l'eau. */
+  async assistant(
+    slug: string,
+    body: { conversationId: string; message: string },
+    onEvent: (event: AssistantEvent) => void,
+  ): Promise<void> {
+    const response = await request(`/trips/${slug}/assistant`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const reader = response.body?.pipeThrough(new TextDecoderStream()).getReader();
+    let pending = '';
+    while (reader) {
+      const { done, value } = await reader.read();
+      pending += value ?? '';
+      const lines = pending.split('\n');
+      pending = done ? '' : (lines.pop() ?? '');
+      for (const line of lines.filter(Boolean)) {
+        onEvent(AssistantEventSchema.parse(JSON.parse(line)));
+      }
+      if (done) break;
+    }
   },
 
   async geocode(query: string): Promise<GeocodeResult[]> {

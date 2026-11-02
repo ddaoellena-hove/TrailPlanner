@@ -39,6 +39,10 @@ export function formatTimeAfter(time: string, minutes: number): string {
   return days > 0 ? `${clock} (+${days} j)` : clock;
 }
 
+export function formatClock(minutes: number): string {
+  return formatTimeAfter('00:00', minutes);
+}
+
 export function formatDay(isoDate: string): string {
   return weekdayDate.format(new Date(`${isoDate}T00:00:00Z`));
 }

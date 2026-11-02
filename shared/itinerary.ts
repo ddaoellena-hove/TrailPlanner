@@ -6,7 +6,7 @@ export const MIN_DRIVE_KM = 0.3;
 const FALLBACK_DETOUR_FACTOR = 1.3;
 const FALLBACK_SPEED_KMH = 70;
 
-type Position = { location: LatLng; name: string; type?: PlaceType };
+type Position = { location: LatLng; name: string; type?: PlaceType; placeId?: string };
 export type LegEnds = { from: LatLng; to: LatLng };
 /** `phase` situe le trajet : vers l'étape, vers son séjour, ou en fin de journée. */
 export type NamedLeg = LegEnds & {
@@ -24,6 +24,7 @@ export type PlannedStop = {
   name: string;
   location: LatLng;
   dayIndex: number;
+  placeId?: string;
 };
 
 function straightLineKm(a: LatLng, b: LatLng): number {
@@ -41,7 +42,14 @@ type ResolvedStop = {
 
 function placePosition(trip: Trip, id: string | undefined): Position | undefined {
   const place = trip.places.find((candidate) => candidate.id === id);
-  return place && { location: place.location, name: place.name, type: place.type };
+  return (
+    place && {
+      location: place.location,
+      name: place.name,
+      type: place.type,
+      placeId: place.id,
+    }
+  );
 }
 
 /** Points de passage d'une étape ; une rando repart de son arrivée. */
@@ -73,6 +81,7 @@ export function plannedStops(trip: Trip): PlannedStop[] {
       name: position.name,
       location: position.location,
       dayIndex: day.index,
+      placeId: position.placeId,
     });
     const markers = day.stops.flatMap((stop) => {
       const resolved = resolveStop(trip, stop);

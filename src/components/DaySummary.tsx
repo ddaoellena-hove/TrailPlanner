@@ -1,4 +1,4 @@
-import { ChevronDown, Footprints, Plus, X } from 'lucide-react';
+import { ChevronDown, CloudSun, Footprints, Plus, Sun, X } from 'lucide-react';
 import { LabeledSelect } from '@/components/HikeSelects';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -12,12 +12,26 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { BOOKING_LABELS } from '@/lib/labels';
 import { cn } from '@/lib/utils';
-import { formatDuration, formatElevationGain, formatKm } from '../../shared/format';
-import type { Day, Settings, Trip } from '../../shared/schema';
+import { formatClock, formatDuration, formatElevationGain, formatKm } from '../../shared/format';
+import { formatWeather } from '../../shared/weather';
+import type { Day, DayWeather, Settings, Trip } from '../../shared/schema';
+import type { SunTimes } from '../../shared/sun';
 import { type DayTotals, loadRatio } from '../../shared/totals';
 import { nightOf } from '../../shared/trip';
 
 const AUTO_NIGHT = 'auto';
+
+function weatherText(weather: DayWeather): string {
+  if (weather.status === 'forecast') return formatWeather(weather);
+  if (weather.status === 'unavailable') return 'Météo indisponible';
+  const from = new Date(`${weather.availableFrom}T00:00:00Z`);
+  const day = new Intl.DateTimeFormat('fr-FR', {
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'UTC',
+  }).format(from);
+  return `Prévision disponible à partir du ${day}`;
+}
 
 function LoadBar({
   label,
@@ -58,12 +72,16 @@ export function DaySummary({
   trip,
   day,
   totals,
+  sun,
+  weather,
   thresholds,
   onChange,
 }: {
   trip: Trip;
   day: Day;
   totals: DayTotals;
+  sun: SunTimes | null;
+  weather: DayWeather | undefined;
   thresholds: Settings['thresholds'];
   onChange: (
     changes: Partial<Pick<Day, 'title' | 'notes' | 'backupHikeIds' | 'nightPlaceId'>>,
@@ -98,6 +116,20 @@ export function DaySummary({
         {formatDuration(totals.hikingMin)} de marche · {formatDuration(totals.drivingMin)} de route
         · fin ≈ {totals.estimatedEndTime}
       </p>
+
+      {sun && (
+        <p className="flex items-center gap-1.5 text-sm text-muted-foreground tabular-nums">
+          <Sun className="size-3.5" aria-hidden />
+          Lever {formatClock(sun.sunriseMin)} · coucher {formatClock(sun.sunsetMin)}
+        </p>
+      )}
+
+      {weather && (
+        <p className="flex items-center gap-1.5 text-sm text-muted-foreground tabular-nums">
+          <CloudSun className="size-3.5" aria-hidden />
+          {weatherText(weather)}
+        </p>
+      )}
 
       {!isLastDay && (
         <div className="grid gap-1">

@@ -132,6 +132,19 @@ export function TripFields({ trip, onSave }: { trip: Trip; onSave: (trip: Trip) 
           />
           <Label htmlFor="trip-dog">Avec chien</Label>
         </div>
+        <div className="flex items-center gap-2 pb-2">
+          <Checkbox
+            id="trip-ev"
+            checked={Boolean(trip.travelers.electricVehicle)}
+            onCheckedChange={(checked) =>
+              onSave({
+                ...trip,
+                travelers: { ...trip.travelers, electricVehicle: checked === true },
+              })
+            }
+          />
+          <Label htmlFor="trip-ev">Voiture électrique</Label>
+        </div>
       </div>
 
       {error && (

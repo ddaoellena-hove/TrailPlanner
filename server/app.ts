@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { Hono } from 'hono';
+import { stream } from 'hono/streaming';
 import { z } from 'zod';
 import {
   DEFAULT_SETTINGS,
@@ -11,9 +12,17 @@ import {
   TripSchema,
 } from '../shared/schema';
 import { computeAlerts } from '../shared/alerts';
+import { describeTrip } from '../shared/assistant-context';
 import { buildCarnet, carnetOutcome, carnetToMarkdown } from '../shared/carnet';
+import { plannedStops } from '../shared/itinerary';
+import { ConversationStore, runAssistantTurn } from './assistant';
+import type { AssistantProvider } from './assistant-provider';
+import { findStations } from './charging';
+import { findPois } from './poi';
+import { tripWeather } from './weather';
 import { geocode } from './geocode';
 import { GpxError, parseGpx } from './gpx';
+import { MapLinkError, resolveMapLink } from './map-link';
 import { NotionExportError, type NotionExporter } from './notion';
 import { computeItinerary } from './routing';
 import { SettingsStore } from './settings-store';
@@ -35,9 +44,17 @@ type AppOptions = {
   health: () => Promise<Health> | Health;
   orsApiKey?: string;
   notion?: NotionExporter;
+  assistants?: AssistantProvider[];
 };
 
-export function createApp({ tripsDir, settingsFile, health, orsApiKey, notion }: AppOptions) {
+export function createApp({
+  tripsDir,
+  settingsFile,
+  health,
+  orsApiKey,
+  notion,
+  assistants = [],
+}: AppOptions) {
   const store = new TripStore(tripsDir);
   const settings = new SettingsStore(settingsFile ?? path.join(tripsDir, 'settings.json'));
   const app = new Hono();
@@ -64,6 +81,7 @@ export function createApp({ tripsDir, settingsFile, health, orsApiKey, notion }:
   app.onError((error, c) => {
     if (error instanceof TripNotFoundError) return c.json({ error: 'Voyage introuvable' }, 404);
     if (error instanceof GpxError) return c.json({ error: error.message }, 400);
+    if (error instanceof MapLinkError) return c.json({ error: error.message }, 400);
     if (error instanceof NotionExportError) return c.json({ error: error.message }, 502);
     console.error(error);
     return c.json({ error: 'Erreur interne du serveur' }, 500);
@@ -76,8 +94,12 @@ export function createApp({ tripsDir, settingsFile, health, orsApiKey, notion }:
   app.put('/api/settings', async (c) => {
     const body = SettingsSchema.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return c.json({ error: 'Réglages invalides' }, 400);
+    const { pace } = await settings.read();
     await settings.write(body.data);
-    await store.applyPace(body.data.pace);
+    // Réécrire tous les voyages n'a de sens que si le rythme change, pas pour une couche.
+    if (JSON.stringify(pace) !== JSON.stringify(body.data.pace)) {
+      await store.applyPace(body.data.pace);
+    }
     return c.json(body.data);
   });
 
@@ -88,6 +110,12 @@ export function createApp({ tripsDir, settingsFile, health, orsApiKey, notion }:
       console.warn('Géocodage indisponible :', error);
       return c.json({ error: "Recherche d'adresse indisponible" }, 502);
     }
+  });
+
+  app.post('/api/map-link', async (c) => {
+    const body = z.object({ url: z.string() }).safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: 'Lien manquant' }, 400);
+    return c.json(await resolveMapLink(body.data.url));
   });
 
   app.get('/api/trips', async (c) => c.json(await store.list()));
@@ -152,8 +180,79 @@ export function createApp({ tripsDir, settingsFile, health, orsApiKey, notion }:
     return c.json(await computeItinerary(store, c.req.param('slug'), orsApiKey, { refresh }));
   });
 
+  app.get('/api/trips/:slug/charging', async (c) => {
+    const slug = c.req.param('slug');
+    const minKw = Number(c.req.query('minKw') ?? 0);
+    if (!Number.isFinite(minKw) || minKw < 0) return c.json({ error: 'Puissance invalide' }, 400);
+    const trip = await store.get(slug);
+    const { legs } = await computeItinerary(store, slug, orsApiKey);
+    const lines = legs.map((leg) => leg.geometry.coordinates);
+    const stops = plannedStops(trip).map(({ location }) => location);
+    try {
+      return c.json(await findStations(lines, stops, minKw));
+    } catch (error) {
+      console.warn('Bornes indisponibles :', error);
+      return c.json({ error: 'Service des bornes indisponible' }, 502);
+    }
+  });
+
+  app.get('/api/trips/:slug/weather', async (c) => {
+    const trip = await store.get(c.req.param('slug'));
+    return c.json(await tripWeather(trip, new Date().toISOString().slice(0, 10)));
+  });
+
+  app.get('/api/trips/:slug/poi', async (c) => {
+    const trip = await store.get(c.req.param('slug'));
+    try {
+      return c.json(await findPois(store, trip));
+    } catch (error) {
+      console.warn('Points utiles indisponibles :', error);
+      return c.json({ error: 'OpenStreetMap est saturé pour le moment, réessayez plus tard' }, 502);
+    }
+  });
+
   app.post('/api/trips/:slug/duplicate', async (c) => {
     return c.json(await store.duplicate(c.req.param('slug')), 201);
+  });
+
+  const conversations = new ConversationStore();
+
+  app.post('/api/trips/:slug/assistant', async (c) => {
+    const current = await settings.read();
+    const provider =
+      assistants.find(({ id }) => id === current.assistantProvider) ?? assistants[0];
+    if (!provider) {
+      return c.json({ error: 'Assistant désactivé : renseignez une clé dans .env' }, 503);
+    }
+    const body = z
+      .object({ conversationId: z.string().min(1), message: z.string().trim().min(1) })
+      .safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: 'Demande invalide' }, 400);
+
+    const slug = c.req.param('slug');
+    const trip = await store.get(slug);
+    const { legs } = await computeItinerary(store, slug, orsApiKey);
+    const today = new Date().toISOString().slice(0, 10);
+    const context = describeTrip(
+      trip,
+      legs,
+      computeAlerts(trip, legs, current),
+      current,
+      await tripWeather(trip, today),
+    );
+    const turn = runAssistantTurn({
+      provider,
+      conversation: conversations.get(body.data.conversationId, provider),
+      trip,
+      context,
+      message: body.data.message,
+      routeCache: await store.readRouteCache(slug),
+      settings: current,
+    });
+    c.header('content-type', 'application/x-ndjson');
+    return stream(c, async (output) => {
+      for await (const event of turn) await output.writeln(JSON.stringify(event));
+    });
   });
 
   const NOTION_MISSING = 'Export désactivé : renseignez NOTION_TOKEN dans .env';
@@ -161,8 +260,9 @@ export function createApp({ tripsDir, settingsFile, health, orsApiKey, notion }:
   const buildExport = async (slug: string) => {
     const trip = await store.get(slug);
     const { legs } = await computeItinerary(store, slug, orsApiKey);
-    const alerts = computeAlerts(trip, legs, await settings.read());
-    const blocks = buildCarnet(trip, legs, alerts, new Date());
+    const current = await settings.read();
+    const alerts = computeAlerts(trip, legs, current);
+    const blocks = buildCarnet(trip, legs, alerts, new Date(), current.dayStartTime);
     return { trip, blocks, outcome: carnetOutcome(trip) };
   };
 

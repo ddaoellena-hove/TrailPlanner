@@ -18,7 +18,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { LabeledSelect } from '@/components/HikeSelects';
 import { api } from '@/lib/api';
+import { ASSISTANT_LABELS } from '@/lib/labels';
 import { formatDuration } from '../../shared/format';
 import { estimateDurationMin } from '../../shared/gpx';
 import type { Health, Settings } from '../../shared/schema';
@@ -43,6 +45,9 @@ const KEY_STATUS: Record<Health['ors'], string> = {
   missing: 'Manquante',
   invalid: 'Invalide',
 };
+
+/** Montant par défaut de l'avertissement de coût de l'assistant. */
+export const DEFAULT_ASSISTANT_BUDGET_USD = 1;
 
 function optionalNumber(value: string): number | undefined {
   return value === '' ? undefined : Number(value);
@@ -176,6 +181,39 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
             </div>
           </section>
 
+          {health.data && health.data.assistantProviders.length > 1 && (
+            <LabeledSelect<string>
+              id="assistant-provider"
+              label="Modèle de l'assistant"
+              value={draft.assistantProvider ?? health.data.assistantProviders[0]!}
+              options={Object.fromEntries(
+                health.data.assistantProviders.map((id) => [id, ASSISTANT_LABELS[id].name]),
+              )}
+              onChange={(value) =>
+                setDraft({
+                  ...draft,
+                  assistantProvider: health.data?.assistantProviders.find((id) => id === value),
+                })
+              }
+            />
+          )}
+
+          <section className="grid gap-1.5">
+            <Label htmlFor="assistant-budget">Prévenir au-delà de ($ par conversation)</Label>
+            <Input
+              id="assistant-budget"
+              type="number"
+              min={0}
+              step="0.5"
+              className="w-32"
+              placeholder={String(DEFAULT_ASSISTANT_BUDGET_USD)}
+              value={draft.assistantBudgetUsd ?? ''}
+              onChange={(event) =>
+                setDraft({ ...draft, assistantBudgetUsd: optionalNumber(event.target.value) })
+              }
+            />
+          </section>
+
           <section className="grid gap-1.5">
             <Label htmlFor="map-base">Fond de carte</Label>
             <Select
@@ -189,6 +227,7 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ign-plan">Plan IGN</SelectItem>
+                <SelectItem value="ortho">Photos aériennes</SelectItem>
                 <SelectItem value="osm">OpenStreetMap</SelectItem>
               </SelectContent>
             </Select>
@@ -199,7 +238,8 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
               <h3 className="font-medium">Clés</h3>
               <p className="text-muted-foreground">
                 OpenRouteService : {KEY_STATUS[health.data.ors]} · Notion :{' '}
-                {KEY_STATUS[health.data.notion]}
+                {KEY_STATUS[health.data.notion]} · Assistant :{' '}
+                {KEY_STATUS[health.data.assistant]}
               </p>
             </section>
           )}

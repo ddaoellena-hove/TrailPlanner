@@ -1,5 +1,5 @@
 import type { Client } from '@notionhq/client';
-import type { Health } from '../shared/schema';
+import type { AssistantProviderId, Health } from '../shared/schema';
 
 const ORS_CHECK_URL =
   'https://api.openrouteservice.org/v2/directions/driving-car?start=6.08,44.56&end=6.09,44.57';
@@ -32,7 +32,13 @@ async function checkNotion(client: Pick<Client, 'users'> | undefined): Promise<H
 export async function checkKeys(
   orsApiKey: string | undefined,
   notion: Pick<Client, 'users'> | undefined,
+  assistantProviders: AssistantProviderId[] = [],
 ): Promise<Health> {
   const [ors, notionStatus] = await Promise.all([checkOrs(orsApiKey), checkNotion(notion)]);
-  return { ors, notion: notionStatus };
+  return {
+    ors,
+    notion: notionStatus,
+    assistant: assistantProviders.length > 0 ? 'configured' : 'missing',
+    assistantProviders,
+  };
 }

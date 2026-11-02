@@ -1,4 +1,4 @@
-import type { Hike, Place, PlaceType } from '../../shared/schema';
+import type { AssistantProviderId, Hike, Place, PlaceType } from '../../shared/schema';
 
 export const KIND_LABELS: Record<Hike['kind'], string> = {
   loop: 'Boucle',
@@ -38,3 +38,8 @@ export function dayColor(dayIndex: number): string {
 /** Trajets voiture sur la carte : le retour du trail à l'hébergement ressort. */
 export const DRIVE_COLOR = '#334155';
 export const TRAIL_TO_STAY_COLOR = '#7c3aed';
+
+export const ASSISTANT_LABELS: Record<AssistantProviderId, { name: string; company: string }> = {
+  anthropic: { name: 'Claude', company: 'Anthropic' },
+  openai: { name: 'ChatGPT', company: 'OpenAI' },
+};

@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react';
 import { AddressField } from '@/components/AddressField';
 import { LabeledSelect } from '@/components/HikeSelects';
+import { MapLinkField } from '@/components/MapLinkField';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -116,6 +117,15 @@ export function PlaceDialog({
               setLocation(result.location);
               setName((current) => current || result.label);
             }}
+          />
+
+          <MapLinkField
+            onResolved={(result) => {
+              setLocation(result.location);
+              setName((current) => current || result.name);
+              setUrl((current) => current || result.url);
+            }}
+            onClear={() => setLocation(place?.location ?? initialLocation ?? null)}
           />
 
           <div className="grid gap-1.5">

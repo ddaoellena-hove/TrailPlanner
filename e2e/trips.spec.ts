@@ -22,6 +22,7 @@ test('créer un voyage, le retrouver après rechargement, le dupliquer et le sup
   await page.getByLabel('Début').fill('2027-07-01');
   await page.getByLabel('Fin', { exact: true }).fill('2027-07-05');
   await page.getByLabel('Avec chien').check();
+  await expect(page.getByLabel('Voiture électrique')).not.toBeChecked();
   await page.getByRole('button', { name: 'Créer le voyage' }).click();
 
   await expect(page).toHaveURL(/\/voyages\/devoluy-champsaur$/);
@@ -130,6 +131,7 @@ test('créer un voyage, le retrouver après rechargement, le dupliquer et le sup
   await page.getByRole('button', { name: 'Ajouter à la bibliothèque' }).click();
   await expect(page.getByText('Non planifiée', { exact: true })).toHaveCount(2);
 
+  await page.getByRole('button', { name: /^Alertes/ }).click();
   await expect(page.getByText('Lac Bleu : dans aucun jour')).toBeVisible();
 
   await page.getByRole('button', { name: 'Lac Bleu', exact: true }).click();
@@ -171,7 +173,17 @@ test('créer un voyage, le retrouver après rechargement, le dupliquer et le sup
   await page.getByRole('button', { name: 'Enregistrer' }).click();
   await expect(page.getByText('Chiens interdits : Crete Sud')).toBeVisible();
 
-  await page.route('**/itinerary*', (route) =>
+  await page.getByLabel('Sélectionner Chien à confirmer : Col du Festre').click();
+  await page.getByRole('button', { name: 'En laisse' }).click();
+  await expect(page.getByText('Chien à confirmer : Col du Festre')).toBeHidden();
+  await page.getByRole('button', { name: 'Annuler la dernière modification' }).click();
+  await expect(page.getByText('Chien à confirmer : Col du Festre')).toBeVisible();
+  await page.getByLabel(/^Chiens : \d+ sur \d+$/).click();
+  await page.getByRole('button', { name: 'Autorisés' }).click();
+  await expect(page.getByText('Chien à confirmer', { exact: false })).toHaveCount(0);
+  await expect(page.getByText('Chiens interdits : Crete Sud')).toBeHidden();
+
+  await page.route('**/api/trips/*/itinerary*', (route) =>
     route.fulfill({
       json: {
         legs: [
@@ -203,7 +215,148 @@ test('créer un voyage, le retrouver après rechargement, le dupliquer et le sup
   await expect(
     page.getByText("Col du Festre → Gap, 05000 : trajet estimé à vol d'oiseau"),
   ).toBeVisible();
-  await page.unroute('**/itinerary*');
+  await page.unroute('**/api/trips/*/itinerary*');
+
+  // Voiture électrique : bornes du trajet, ajoutées aux lieux du voyage.
+  await page.route('**/api/trips/*/charging*', (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 'FRTEST1',
+          name: 'Borne du col',
+          address: '1 route du col, 05000 Gap',
+          operator: 'Opérateur test',
+          location: { lat: 44.7, lng: 5.95 },
+          maxPowerKw: 150,
+          points: 8,
+          connectors: ['CCS', 'Type 2'],
+          hours: '24/7',
+        },
+      ],
+    }),
+  );
+  await page.getByLabel('Voiture électrique').click();
+  await expect(page.getByLabel('Voiture électrique')).toBeChecked();
+  await page.getByRole('tab', { name: /Lieux/ }).click();
+  await page.getByRole('button', { name: 'Ajouter Borne du col au voyage' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Ajouter' }).click();
+  await expect(page.getByRole('button', { name: 'Borne du col', exact: true })).toHaveCount(2);
+  await page.getByRole('tab', { name: /Randos/ }).click();
+
+  // Borne saisie par lien Google Maps, à la position exacte du lien.
+  await page.getByRole('button', { name: 'Ajouter une recharge au jour 1' }).click();
+  await page
+    .getByLabel('Lien Google Maps')
+    .fill('https://www.google.com/maps/place/Ma+borne/@44.0,5.0,17z/data=!3d44.6!4d5.9');
+  await page.getByRole('button', { name: 'Lire le lien' }).click();
+  await expect(page.getByLabel('Nom de la borne')).toHaveValue('Ma borne');
+  await page.getByRole('dialog').getByRole('button', { name: 'Ajouter' }).click();
+  await page.getByRole('tab', { name: /Lieux/ }).click();
+  await expect(page.getByRole('button', { name: 'Ma borne', exact: true })).toHaveCount(2);
+  await page.getByRole('button', { name: 'Supprimer Ma borne' }).click();
+  await expect(page.getByRole('button', { name: 'Ma borne', exact: true })).toHaveCount(0);
+  await page.getByRole('tab', { name: /Randos/ }).click();
+
+  await page.getByRole('button', { name: 'Ajouter une recharge au jour 1' }).click();
+  await expect(page.getByLabel('Pause (min)', { exact: true }).last()).toHaveValue('30');
+  await page.getByRole('dialog').getByRole('button', { name: 'Ajouter' }).click();
+  await expect(page.getByRole('button', { name: 'Borne du col', exact: true })).toHaveCount(2);
+
+  await expect(page.getByText('Résumé du voyage')).toBeVisible();
+  await expect(page.getByTestId('stat-Randos')).toContainText('2');
+
+  // Couches de carte : s'appliquent et restent après rechargement.
+  await page.getByRole('button', { name: 'Couches' }).click();
+  await page.getByLabel('Courbes de niveau').click();
+  await page.getByLabel('Repères des étapes').click();
+  await expect(page.locator('.maplibregl-marker')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.reload();
+  await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+  await page.getByRole('button', { name: 'Couches' }).click();
+  await expect(page.getByLabel('Courbes de niveau')).toBeChecked();
+  await page.getByRole('button', { name: 'Réinitialiser la carte' }).click();
+  await expect(page.locator('.maplibregl-marker').first()).toBeVisible();
+  await expect(page.getByLabel('Courbes de niveau')).not.toBeChecked();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: /^Alertes/ }).click();
+
+  // Budget, checklist et points utiles.
+  await expect(page.getByLabel('Montant (€)')).toBeHidden();
+  await page.getByRole('button', { name: 'Préparation' }).click();
+  await page.getByLabel('Montant (€)').fill('25');
+  await page.getByLabel('Libellé').fill('Péage A43');
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
+  await expect(page.getByText('Péage A43')).toBeVisible();
+  await page.getByRole('tab', { name: 'Checklist' }).click();
+  await page.getByRole('button', { name: /Ajouter \d+ suggestions/ }).click();
+  await page.getByRole('checkbox', { name: 'Laisse', exact: true }).click();
+  await expect(page.getByText('1 sur', { exact: false })).toBeVisible();
+
+  await expect(page.getByText(/Prévision disponible à partir du/).first()).toBeVisible();
+  await expect(page.getByText(/Lever \d\d:\d\d · coucher \d\d:\d\d/).first()).toBeVisible();
+
+  await page.route('**/api/trips/*/poi', (route) =>
+    route.fulfill({
+      json: [
+        { id: 'node/1', kind: 'water', name: 'Fontaine du col', location: { lat: 44.71, lng: 5.9 } },
+      ],
+    }),
+  );
+  await page.getByRole('tab', { name: /Lieux/ }).click();
+  await page.getByRole('button', { name: 'Chercher eau, refuges, campings' }).click();
+  await page.getByRole('button', { name: 'Ajouter Fontaine du col au voyage' }).click();
+  await expect(page.getByRole('button', { name: 'Fontaine du col', exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: /Randos/ }).click();
+
+  // Assistant : sans clé il s'explique ; une proposition ne change rien avant « Appliquer ».
+  await page.getByRole('button', { name: /^Assistant/ }).click();
+  await expect(page.getByText('ANTHROPIC_API_KEY', { exact: false })).toBeVisible();
+  await page.route('**/api/health', (route) =>
+    route.fulfill({
+      json: {
+        ors: 'missing',
+        notion: 'missing',
+        assistant: 'configured',
+        assistantProviders: ['anthropic', 'openai'],
+      },
+    }),
+  );
+  await page.route('**/api/trips/*/assistant', (route) =>
+    route.fulfill({
+      contentType: 'application/x-ndjson',
+      body: [
+        { type: 'text', text: 'Je propose un titre.' },
+        {
+          type: 'proposal',
+          proposal: {
+            summary: 'Nommer la journée.',
+            ops: [{ op: 'set_day_title', dayIndex: 1, title: 'Tour du col' }],
+            descriptions: ['Titre du J1 : Tour du col'],
+            impact: { days: [], alertsResolved: ['Alerte test'], alertsAdded: [] },
+            basedOn: 'ancienne-version',
+          },
+        },
+        { type: 'done', usage: { costUsd: 0.012 } },
+      ]
+        .map((event) => JSON.stringify(event))
+        .join('\n'),
+    }),
+  );
+  await page.reload();
+  await page.getByRole('button', { name: /^Assistant/ }).click();
+  await page.getByLabel('Votre demande').fill('Nomme le premier jour');
+  await page.getByRole('button', { name: 'Envoyer' }).click();
+  await expect(page.getByText('Titre du J1 : Tour du col')).toBeVisible();
+  await expect(page.getByText('Alerte test')).toBeVisible();
+  await expect(page.getByLabel('Titre du jour 1')).toHaveValue('');
+  await page.getByRole('button', { name: 'Appliquer' }).click();
+  await expect(page.getByLabel('Titre du jour 1')).toHaveValue('Tour du col');
+  await page.getByRole('button', { name: 'Annuler la dernière modification' }).click();
+  await expect(page.getByLabel('Titre du jour 1')).toHaveValue('');
+  await page.getByRole('button', { name: 'Rétablir' }).click();
+  await page.getByRole('button', { name: /^Alertes/ }).click();
+  await page.getByRole('button', { name: 'Préparation' }).click();
 
   // Sans token, l'aperçu reste disponible et l'export s'explique.
   await page.getByRole('button', { name: 'Exporter vers Notion' }).click();

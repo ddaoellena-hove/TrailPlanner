@@ -22,15 +22,18 @@ import {
   countDroppedDays,
   directionsUrl,
   generateDays,
+  insertChargeStop,
   moveStop,
   nightOf,
   removeHike,
   removePlace,
   removeStop,
   replaceHikeTrack,
+  setDogPolicies,
   setStopDuration,
   setStopPlaces,
   slugify,
+  stopSlots,
   summarizeTrip,
   unplanned,
   updateDay,
@@ -272,6 +275,46 @@ describe('lieux et nuits', () => {
     const stayId = withRefs.places.find(({ name }) => name === 'Séjour')!.id;
     const noStay = removePlace(withRefs, stayId);
     expect(noStay.days[0]!.stops[0]).not.toMatchObject({ stayPlaceId: stayId });
+  });
+
+  it('applique une politique chiens à plusieurs éléments', () => {
+    const rando = hike(1, 0);
+    const autre = hike(2, 0);
+    const base = addPlaceStop(addHikes(trip(), [rando, autre]), 1, hotel);
+
+    const updated = setDogPolicies(base, [rando.id, hotel.id], 'leash');
+
+    expect(updated.hikes.map(({ dogPolicy }) => dogPolicy)).toEqual(['leash', 'unknown']);
+    expect(updated.places[0]?.dogPolicy).toBe('allowed');
+    const forbidden = setDogPolicies(base, [hotel.id], 'forbidden');
+    expect(forbidden.places[0]?.dogPolicy).toBe('forbidden');
+  });
+
+  it('propose un emplacement avant chaque étape et en fin de journée', () => {
+    const base = addPlaceStop(addHikeStop(trip(), 1, { ...hike(1, 0), name: 'Col' }), 1, hotel);
+    const slots = stopSlots(base);
+    expect(slots.filter(({ dayIndex }) => dayIndex === 1).map(({ label }) => label)).toEqual([
+      'J1 · avant Col',
+      'J1 · avant Hôtel',
+      'J1 · en fin de journée',
+    ]);
+    expect(slots.at(-1)).toMatchObject({ label: 'J3 · en fin de journée', position: 0 });
+    expect(slots.at(-1)?.location).toBeUndefined();
+  });
+
+  it('insère une recharge à la position voulue, avec sa pause', () => {
+    const base = addPlaceStop(addHikeStop(trip(), 1, hike(1, 0)), 1, hotel);
+    const borne = { ...parking, id: randomUUID(), type: 'charging' as const, name: 'Borne' };
+
+    const inserted = insertChargeStop(base, borne, 1, 1, 30);
+
+    expect(inserted.places).toContainEqual(borne);
+    expect(inserted.days[0]!.stops[1]).toMatchObject({ placeId: borne.id, durationMin: 30 });
+    expect(inserted.days[0]!.stops).toHaveLength(3);
+
+    const again = insertChargeStop(inserted, borne, 2, 0, undefined);
+    expect(again.places.filter(({ id }) => id === borne.id)).toHaveLength(1);
+    expect(again.days[1]!.stops[0]).toMatchObject({ placeId: borne.id });
   });
 
   it('enregistre la durée d’une pause', () => {

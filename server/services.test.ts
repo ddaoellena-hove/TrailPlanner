@@ -4,6 +4,10 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Place, Trip } from '../shared/schema';
 import { addPlaceStop } from '../shared/trip';
+import { findStations } from './charging';
+import { findPois, overpassQuery, toPois } from './poi';
+import { tripWeather } from './weather';
+import { MapLinkError, resolveMapLink } from './map-link';
 import { geocode } from './geocode';
 import { checkKeys } from './health';
 import { computeItinerary } from './routing';
@@ -167,7 +171,12 @@ describe('checkKeys', () => {
   it('signale les clés manquantes sans rien appeler', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    expect(await checkKeys(undefined, undefined)).toEqual({ ors: 'missing', notion: 'missing' });
+    expect(await checkKeys(undefined, undefined)).toEqual({
+      ors: 'missing',
+      notion: 'missing',
+      assistant: 'missing',
+      assistantProviders: [],
+    });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -175,12 +184,310 @@ describe('checkKeys', () => {
     vi.stubGlobal('fetch', vi.fn(async () => json({}, 403)));
     const refused = Object.assign(new Error('refus'), { status: 401 });
     const result = await checkKeys('cle', notion(() => Promise.reject(refused)));
-    expect(result).toEqual({ ors: 'invalid', notion: 'invalid' });
+    expect(result).toMatchObject({ ors: 'invalid', notion: 'invalid' });
   });
 
   it('ne déclare pas une clé invalide sur panne réseau', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('réseau'))));
     const down = notion(() => Promise.reject(new Error('réseau')));
-    expect(await checkKeys('cle', down)).toEqual({ ors: 'configured', notion: 'configured' });
+    expect(await checkKeys('cle', down, ['openai'])).toEqual({
+      ors: 'configured',
+      notion: 'configured',
+      assistant: 'configured',
+      assistantProviders: ['openai'],
+    });
+  });
+});
+
+describe('findStations', () => {
+  const row = (overrides: Record<string, unknown>) => ({
+    id_station_itinerance: 'FR1',
+    nom_station: 'Gap Centre',
+    adresse_station: '1 rue de Gap',
+    nom_operateur: 'Opérateur',
+    nom_enseigne: 'Enseigne',
+    consolidated_latitude: 44.56,
+    consolidated_longitude: 6.08,
+    consolidated_is_lon_lat_correct: true,
+    puissance_nominale: 22,
+    nbre_pdc: 4,
+    prise_type_combo_ccs: false,
+    prise_type_2: true,
+    prise_type_chademo: false,
+    horaires: '24/7',
+    ...overrides,
+  });
+
+  const dataset = {
+    resources: [
+      { id: 'ancien', format: 'csv', type: 'main', last_modified: '2026-11-01T04:00:00' },
+      { id: 'doc', format: 'csv', type: 'documentation', last_modified: '2026-11-03T04:00:00' },
+      { id: 'geo', format: 'geojson', type: 'main', last_modified: '2026-11-03T04:00:00' },
+      { id: 'recent', format: 'csv', type: 'main', last_modified: '2026-11-02T04:00:00' },
+    ],
+  };
+
+  const respond = (rows: unknown[]) =>
+    vi.fn(async (url: string) =>
+      url.includes('/datasets/') ? json(dataset) : json({ data: rows, meta: {} }),
+    );
+
+  it('regroupe les points de charge par station', async () => {
+    vi.stubGlobal(
+      'fetch',
+      respond([
+        row({ puissance_nominale: 150, prise_type_combo_ccs: true }),
+        row({ puissance_nominale: 22 }),
+        row({ id_station_itinerance: 'FR2', nom_station: 'Autre', puissance_nominale: 60 }),
+      ]),
+    );
+
+    const stations = await findStations([], [{ lat: 44.56, lng: 6.08 }], 0);
+
+    expect(stations.map(({ id }) => id)).toEqual(['FR1', 'FR2']);
+    expect(stations[0]).toMatchObject({
+      maxPowerKw: 150,
+      points: 4,
+      connectors: ['CCS', 'Type 2'],
+      location: { lat: 44.56, lng: 6.08 },
+    });
+  });
+
+  it('ramène en kW les puissances saisies en W et filtre après conversion', async () => {
+    vi.stubGlobal(
+      'fetch',
+      respond([
+        row({ puissance_nominale: 50000 }),
+        row({ id_station_itinerance: 'FR2', puissance_nominale: 22 }),
+      ]),
+    );
+    const stations = await findStations([], [{ lat: 44.56, lng: 6.08 }], 50);
+    expect(stations.map(({ id, maxPowerKw }) => [id, maxPowerKw])).toEqual([['FR1', 50]]);
+  });
+
+  it('écarte les coordonnées signalées incorrectes', async () => {
+    vi.stubGlobal('fetch', respond([row({ consolidated_is_lon_lat_correct: false })]));
+    expect(await findStations([], [{ lat: 44.56, lng: 6.08 }], 0)).toEqual([]);
+  });
+
+  it('interroge chaque zone une seule fois, et rien sans zone', async () => {
+    const fetchMock = respond([]);
+    vi.stubGlobal('fetch', fetchMock);
+    await findStations([], [], 0);
+    expect(fetchMock).not.toHaveBeenCalled();
+    const here = { lat: 44.56, lng: 6.08 };
+    await findStations([], [here, here], 50);
+    const tabular = fetchMock.mock.calls.filter(([url]) => url.includes('tabular-api'));
+    expect(tabular).toHaveLength(1);
+    expect(tabular[0]![0]).toContain('/resources/recent/');
+  });
+
+  it('passe au fichier suivant si le plus récent a été supprimé', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes('/datasets/')) return json(dataset);
+      if (url.includes('/recent/')) return new Response('supprimé', { status: 410 });
+      return json({ data: [row({})], meta: {} });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const stations = await findStations([], [{ lat: 44.56, lng: 6.08 }], 0);
+    expect(stations.map(({ id }) => id)).toEqual(['FR1']);
+  });
+
+  it('signale l’échec si aucun fichier ne répond', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.includes('/datasets/') ? json(dataset) : new Response('', { status: 410 }),
+      ),
+    );
+    await expect(findStations([], [{ lat: 44.56, lng: 6.08 }], 0)).rejects.toThrow(/aucun fichier/);
+  });
+});
+
+describe('resolveMapLink', () => {
+  const redirect = (location: string) =>
+    new Response(null, { status: 302, headers: { location } });
+
+  it('lit un lien long sans aucun appel réseau', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const link = await resolveMapLink(
+      'https://www.google.com/maps/place/Borne+Gap/@44.5,6.0,17z/data=!3d44.5612!4d6.0811',
+    );
+    expect(link).toMatchObject({
+      name: 'Borne Gap',
+      location: { lat: 44.5612, lng: 6.0811 },
+      approximate: false,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('suit un lien court jusqu’à la position, sans lire de page', async () => {
+    const fetchMock = vi
+      .fn<() => Promise<Response>>()
+      .mockResolvedValue(
+        redirect('https://www.google.com/maps/place/Lidl/data=!3d45.1!4d6.2?g_st=ic'),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const link = await resolveMapLink('https://maps.app.goo.gl/AbCd123');
+    expect(link.location).toEqual({ lat: 45.1, lng: 6.2 });
+    expect(link.url).toBe('https://maps.app.goo.gl/AbCd123');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('traverse l’écran de consentement', async () => {
+    const target = encodeURIComponent('https://www.google.com/maps/@45.2,6.3,15z');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => redirect(`https://consent.google.com/m?continue=${target}`)),
+    );
+    expect((await resolveMapLink('https://maps.app.goo.gl/x')).location).toEqual({
+      lat: 45.2,
+      lng: 6.3,
+    });
+  });
+
+  it('refuse de suivre une redirection hors de Google', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => redirect('http://127.0.0.1:5174/api/settings')));
+    await expect(resolveMapLink('https://maps.app.goo.gl/x')).rejects.toThrow(MapLinkError);
+  });
+
+  it('refuse un lien qui n’est pas Google Maps, sans l’appeler', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(resolveMapLink('https://evil.example/maps')).rejects.toThrow(/Google Maps/);
+    await expect(resolveMapLink('https://google.com.evil.example/')).rejects.toThrow(/Google Maps/);
+    await expect(resolveMapLink('pas un lien')).rejects.toThrow(/adresse web/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('géocode une recherche sans coordonnées et le signale', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json({ results: [{ fulltext: 'Gap, 05000', x: 6.08, y: 44.56 }] })),
+    );
+    const link = await resolveMapLink('https://www.google.com/maps?q=Gap');
+    expect(link).toMatchObject({ approximate: true, location: { lat: 44.56, lng: 6.08 } });
+  });
+});
+
+describe('tripWeather', () => {
+  const base = (date: string): Trip => {
+    const stop = { id: crypto.randomUUID(), kind: 'place' as const, placeId: 'x' };
+    const place = lodging(45, 6);
+    return {
+      startDate: date,
+      endDate: date,
+      hikes: [],
+      places: [place],
+      days: [
+        { date, index: 1, stops: [{ ...stop, placeId: place.id }], backupHikeIds: [] },
+      ],
+    } as unknown as Trip;
+  };
+
+  it('annonce la date de prévision pour un jour trop lointain, sans appel', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await tripWeather(base('2026-12-10'), '2026-11-02')).toEqual({
+      1: { status: 'later', availableFrom: '2026-11-25' },
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rend la prévision du jour', async () => {
+    const fetchMock = vi.fn(async () =>
+      json({
+        daily: {
+          temperature_2m_max: [3],
+          temperature_2m_min: [-4],
+          precipitation_sum: [5],
+          wind_speed_10m_max: [40],
+          weather_code: [73],
+        },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const weather = await tripWeather(base('2026-11-05'), '2026-11-02');
+    expect(weather[1]).toMatchObject({ status: 'forecast', tempMinC: -4, code: 73 });
+  });
+
+  it('reste utilisable en cas de panne', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json({}, 500)));
+    expect(await tripWeather(base('2026-11-06'), '2026-11-02')).toEqual({
+      1: { status: 'unavailable' },
+    });
+  });
+
+  it('ignore un jour passé', async () => {
+    expect(await tripWeather(base('2026-10-01'), '2026-11-02')).toEqual({});
+  });
+});
+
+describe('points utiles', () => {
+  const hike = {
+    stats: { profile: [{ distKm: 0, altM: 1000, lat: 45, lng: 6 }] },
+  };
+  const trip = { slug: 'test', hikes: [hike] } as unknown as Trip;
+  const element = {
+    type: 'node',
+    id: 1,
+    lat: 45.01,
+    lon: 6.01,
+    tags: { amenity: 'drinking_water' },
+  };
+  const memoryStore = () => {
+    let cache: Awaited<ReturnType<TripStore['readPoiCache']>> = null;
+    return {
+      readPoiCache: async () => cache,
+      writePoiCache: async (_slug: string, value: typeof cache) => {
+        cache = value;
+      },
+    } as unknown as TripStore;
+  };
+
+  it('nomme un point sans nom et ignore le reste', () => {
+    const pois = toPois([
+      element,
+      { type: 'way', id: 2, center: { lat: 45, lon: 6 }, tags: { tourism: 'alpine_hut', name: 'Refuge X' } },
+      { type: 'node', id: 3, lat: 45, lon: 6, tags: { shop: 'bakery' } },
+      { type: 'node', id: 4, tags: { amenity: 'parking' } },
+    ]);
+    expect(pois.map(({ id, kind, name }) => [id, kind, name])).toEqual([
+      ['node/1', 'water', 'Point d’eau'],
+      ['way/2', 'hut', 'Refuge X'],
+    ]);
+  });
+
+  it('construit une seule requête pour toutes les zones', () => {
+    const query = overpassQuery([{ south: 1, west: 2, north: 3, east: 4 }]);
+    expect(query).toContain('"drinking_water"](1,2,3,4)');
+    expect(query).toContain('alpine_hut');
+  });
+
+  it('passe au serveur suivant, puis garde le résultat en cache', async () => {
+    const fetchMock = vi
+      .fn<() => Promise<Response>>()
+      .mockResolvedValueOnce(json({}, 502))
+      .mockResolvedValue(json({ elements: [element] }));
+    vi.stubGlobal('fetch', fetchMock);
+    const store = memoryStore();
+
+    expect(await findPois(store, trip)).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(await findPois(store, trip)).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('remonte l’erreur si tout est saturé et que rien n’est en cache', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json({}, 502)));
+    await expect(findPois(memoryStore(), trip)).rejects.toThrow(/Overpass/);
+  });
+
+  it('ne cherche rien sans rando', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await findPois(memoryStore(), { ...trip, hikes: [] })).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

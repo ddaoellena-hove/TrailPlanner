@@ -15,7 +15,7 @@ Chaque jour du voyage est une séquence d'étapes (randos, lieux) partant de la 
 Aujourd'hui, l'utilisateur prépare ses voyages à la main dans Notion : un tableau jour par jour où le D+ reste « à vérifier », les temps de route sont « à recalculer », et les traversées posent la question de la récupération du véhicule. L'outil fournit ces chiffres de façon fiable et rend visible ce qui ne tient pas.
 
 ### Principes
-- **Local-first** : les données vivent sur disque, en fichiers lisibles. Aucun compte.
+- **Local-first** : les données vivent sur disque, en fichiers lisibles. Aucun compte. Seule exception volontaire : l'assistant, optionnel, envoie le contenu du voyage à l'API Anthropic quand on lui écrit.
 - **Calculé, pas saisi** : distance, D+, durées, trajets sont dérivés des GPX et du routage.
 - **Pas de seuils imposés** : l'utilisateur définit ses propres seuils. Aucune alerte de charge tant qu'ils ne sont pas définis.
 - **Notion = sortie**, pas source : l'outil écrit dans Notion, il ne lit pas le contenu Notion en V1.
@@ -34,12 +34,10 @@ Aujourd'hui, l'utilisateur prépare ses voyages à la main dans Notion : un tabl
 7. Export vers Notion
 
 ### V2 (hors V1, ne pas implémenter, mais ne pas bloquer)
-- Météo (Open-Meteo) et lever/coucher du soleil (suncalc) avec alerte « fin de rando après le coucher du soleil »
-- POI OpenStreetMap autour des tracés (eau, refuges, campings) via Overpass
 - Export GPX par jour / fusionné ; roadbook PDF
-- Planification de la recharge VE automatique (bornes sur le trajet)
 
 ### Hors périmètre
+- Planification automatique de la recharge VE selon l'autonomie (les bornes sur le trajet sont en V1, au choix manuel, voir question 23).
 - Récupération automatique des tracés depuis AllTrails (scraping, API interne) : fragile et contraire aux CGU.
 - Multi-utilisateur, authentification, déploiement en ligne, app mobile.
 - Synchronisation bidirectionnelle avec Notion.
@@ -64,6 +62,7 @@ Aujourd'hui, l'utilisateur prépare ses voyages à la main dans Notion : un tabl
 | Backend | Node + Hono | Sert l'API locale, détient les clés, écrit les fichiers. |
 | Notion | `@notionhq/client` (officiel) | Appels **uniquement côté serveur** : l'API Notion refuse les appels navigateur. |
 | Routage | OpenRouteService Directions API, profil `driving-car` | Clé gratuite dans `.env`. |
+| Bornes de recharge | Base nationale IRVE (data.gouv.fr, API tabulaire) | Sans clé, France uniquement, mise à jour quotidienne. |
 | Tests | Vitest (unitaires) + Playwright (1 parcours e2e) | |
 | Lancement | `npm run dev` lance front + back (concurrently) | Ports par défaut : web 5173, api 5174. |
 
@@ -235,6 +234,7 @@ Recalculée pour toutes les randos dès qu'un réglage `pace` change.
 | A6 | Rando placée dans la bibliothèque mais dans aucun jour | info |
 | A7 | Trajet calculé en repli ligne droite (ORS indisponible) | warning |
 | A8 | Hébergement `to-book` ou `idea` | info |
+| A9 | Rando finie après le coucher du soleil, à son point de départ | warning |
 
 Les alertes sont affichées sur la carte du jour (badge) et dans un panneau récapitulatif du voyage.
 
@@ -372,6 +372,11 @@ Les pages projet contiennent du contenu écrit à la main (objectif, réglementa
 | GET | `/api/trips/:slug/gpx/:hikeId` | GeoJSON de la trace |
 | POST | `/api/route` | trajet ORS (avec cache) |
 | GET | `/api/geocode?q=` | géocodage ORS |
+| GET | `/api/trips/:slug/charging?minKw=` | bornes le long des trajets et autour des étapes |
+| POST | `/api/trips/:slug/assistant` | tour de conversation de l'assistant, en NDJSON |
+| GET | `/api/trips/:slug/weather` | météo par jour (Open-Meteo, 16 jours) |
+| GET | `/api/trips/:slug/poi` | eau, refuges, campings, parkings autour des randos (Overpass) |
+| POST | `/api/map-link` | position d'un lien Google Maps (lien lu tel quel, lien court suivi par redirection, jamais de lecture de page) |
 | GET/PUT | `/api/settings` | réglages |
 | GET | `/api/health` | état des clés ORS / Notion |
 | POST | `/api/trips/:slug/notion/preview` | Markdown de l'export |
@@ -468,3 +473,9 @@ Relevées pendant M0, avec le choix provisoire appliqué en attendant la répons
 22. Couleur du trajet : demande de David, comprise comme le trajet voiture allant d'une rando à un hébergement (violet sur la carte, repère violet dans les listes). À confirmer.
 
 Mesure US2 (2 novembre 2026, sur un voyage réel) : survol du profil → point sur la carte en 12 ms en médiane, 27 ms au maximum sur 40 mesures.
+23. Voiture électrique (`travelers.electricVehicle`) : ajoutée à la demande de David. Les bornes viennent de la base nationale IRVE, dans un couloir d'environ 5 km autour des trajets et des étapes, filtrées par puissance. Tranché par David : pas de planification selon l'autonomie, les bornes se choisissent à la main et s'insèrent dans le planning avec leur pause.
+24. Météo : donnée au départ de la première rando du jour, à son altitude maximale (scénario le plus froid). Aucune alerte n'en découle, faute de seuils. Faut-il en définir ? (Provisoire : non.)
+25. Budget : péages et recharge se saisissent à la main, faute de source fiable sans clé. Un refuge ou camping ajouté depuis OpenStreetMap devient un lieu de type `lodging`, un point d'eau un `poi`.
+26. Assistant de voyage : Claude Opus 5.5 via `ANTHROPIC_API_KEY`, côté serveur. Il ne peut que simuler et proposer des opérations limitées (`shared/assistant-ops.ts`) ; rien ne s'applique sans clic, et tout s'annule. Les conversations vivent en mémoire et disparaissent au redémarrage. Faut-il les conserver ? (Provisoire : non.)
+27. Second fournisseur pour l'assistant : OpenAI, via `OPENAI_API_KEY` et `OPENAI_MODEL`, sans modèle par défaut. Choix dans les Réglages quand deux sont configurés ; changer de fournisseur repart d'une conversation vide. Le coût n'est pas calculé pour OpenAI, faute de tarif fiable par modèle.
+28. Couches de carte : fond (Plan IGN, photos aériennes, OpenStreetMap) atténuable, couches IGN superposables (relief, pentes, courbes, eau, routes, traces hivernales) et éléments du voyage masquables. Réglages globaux, communs à tous les voyages. Faut-il des réglages par voyage ? (Provisoire : non.)

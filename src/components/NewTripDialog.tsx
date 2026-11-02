@@ -25,6 +25,7 @@ export function NewTripDialog({ trigger }: { trigger: ReactNode }) {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [withDog, setWithDog] = useState(false);
+  const [electricVehicle, setElectricVehicle] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const createTrip = useMutation({
@@ -37,7 +38,13 @@ export function NewTripDialog({ trigger }: { trigger: ReactNode }) {
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
-    const input = NewTripSchema.safeParse({ name, startDate, endDate, withDog });
+    const input = NewTripSchema.safeParse({
+      name,
+      startDate,
+      endDate,
+      withDog,
+      electricVehicle,
+    });
     if (!input.success) {
       setValidationError(input.error.issues[0]?.message ?? 'Formulaire invalide');
       return;
@@ -104,6 +111,15 @@ export function NewTripDialog({ trigger }: { trigger: ReactNode }) {
               onCheckedChange={(checked) => setWithDog(checked === true)}
             />
             <Label htmlFor="trip-dog">Avec chien</Label>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="trip-ev"
+              checked={electricVehicle}
+              onCheckedChange={(checked) => setElectricVehicle(checked === true)}
+            />
+            <Label htmlFor="trip-ev">Voiture électrique</Label>
           </div>
 
           {error && (

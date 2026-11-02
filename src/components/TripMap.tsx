@@ -13,30 +13,28 @@ import Map, {
 import { PlaceIcon } from '@/components/PlaceIcon';
 import { Button } from '@/components/ui/button';
 import { dayColor, DRIVE_COLOR, TRAIL_TO_STAY_COLOR } from '@/lib/labels';
+import { BASE_LAYERS, type MapView, OVERLAYS, type TripLayerId } from '@/lib/map-layers';
 import { plannedStops } from '../../shared/itinerary';
-import type { Hike, ItineraryLeg, LatLng, Settings, Trip } from '../../shared/schema';
+import { formatStation } from '@/lib/stations';
+import type {
+  ChargingStation,
+  Hike,
+  ItineraryLeg,
+  LatLng,
+  Poi,
+  Settings,
+  Trip,
+} from '../../shared/schema';
 import { unplanned as unplannedOf } from '../../shared/trip';
 
-const IGN_TILES =
-  'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0' +
-  '&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/png' +
-  '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}';
-
-function rasterStyle(tiles: string, attribution: string, maxzoom: number): StyleSpecification {
-  return {
-    version: 8,
-    sources: { base: { type: 'raster', tiles: [tiles], tileSize: 256, maxzoom, attribution } },
-    layers: [{ id: 'base', type: 'raster', source: 'base' }],
-  };
-}
-
-const MAP_STYLES: Record<Settings['mapBaseLayer'], StyleSpecification> = {
-  'ign-plan': rasterStyle(IGN_TILES, '© IGN', 19),
-  osm: rasterStyle(
-    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    '© contributeurs OpenStreetMap',
-    19,
-  ),
+/**
+ * Le fond et les couches sont des sources React, modifiables sans tout recharger. Le blanc
+ * sous la carte fait qu'atténuer le fond l'éclaircit, y compris en thème sombre.
+ */
+const EMPTY_STYLE: StyleSpecification = {
+  version: 8,
+  sources: {},
+  layers: [{ id: 'paper', type: 'background', paint: { 'background-color': '#ffffff' } }],
 };
 
 const FRANCE_VIEW = { longitude: 2.5, latitude: 46.6, zoom: 4.6 };
@@ -70,6 +68,17 @@ function driveLines(legs: ItineraryLeg[]): GeoJSON.FeatureCollection {
   };
 }
 
+function points(items: { id: string; location: LatLng }[]): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: items.map(({ id, location }) => ({
+      type: 'Feature',
+      properties: { itemId: id },
+      geometry: { type: 'Point', coordinates: [location.lng, location.lat] },
+    })),
+  };
+}
+
 function boundsOf(positions: number[][]): Bounds | undefined {
   if (positions.length === 0) return undefined;
   const longitudes = positions.map((position) => position[0]!);
@@ -89,23 +98,37 @@ export function TripMap({
   focus,
   dayFilter,
   baseLayer,
+  view,
   highlightedHikeId,
   cursor,
   onHikeHover,
   onAddPlaceAt,
+  onOpenPlace,
+  stations,
+  onAddStation,
+  pois,
+  onAddPoi,
 }: {
   trip: Trip;
   legs: ItineraryLeg[];
   focus: MapFocus | null;
   dayFilter: number | null;
   baseLayer: Settings['mapBaseLayer'];
+  view: MapView;
   highlightedHikeId: string | null;
   cursor: LatLng | null;
   onHikeHover: (hikeId: string | null, position: LatLng) => void;
   onAddPlaceAt: (location: LatLng) => void;
+  onOpenPlace: (placeId: string) => void;
+  stations: ChargingStation[];
+  onAddStation: (station: ChargingStation) => void;
+  pois: Poi[];
+  onAddPoi: (poi: Poi) => void;
 }) {
   const mapRef = useRef<MapRef>(null);
   const [menuAt, setMenuAt] = useState<LatLng | null>(null);
+  const [openStation, setOpenStation] = useState<ChargingStation | null>(null);
+  const [openPoi, setOpenPoi] = useState<Poi | null>(null);
 
   const { planned, backups, loose, stops, colorOf, bounds } = useMemo(() => {
     const days = trip.days.filter((day) => !dayFilter || day.index === dayFilter);
@@ -135,6 +158,7 @@ export function TripMap({
             name: place.name,
             location: place.location,
             dayIndex: 0,
+            placeId: place.id,
           }))),
     ];
     const bounds = boundsOf([
@@ -145,6 +169,10 @@ export function TripMap({
     const colorOf = (hike: Hike) => dayColor(dayOf.get(hike.id) ?? 1);
     return { planned, backups, loose, stops, colorOf, bounds };
   }, [trip, legs, dayFilter]);
+
+  const shown = (id: TripLayerId) => ({
+    visibility: view.hidden.includes(id) ? ('none' as const) : ('visible' as const),
+  });
 
   // Réordonner garde le même cadrage : la carte ne bouge que si l'emprise change.
   const boundsKey = JSON.stringify(bounds);
@@ -165,12 +193,19 @@ export function TripMap({
     <Map
       ref={mapRef}
       initialViewState={bounds ? { bounds, fitBoundsOptions: FIT_OPTIONS } : FRANCE_VIEW}
-      mapStyle={MAP_STYLES[baseLayer]}
-      interactiveLayerIds={['hikes-hit']}
+      mapStyle={EMPTY_STYLE}
+      interactiveLayerIds={['hikes-hit', 'charging-stations', 'poi-points']}
       cursor={highlightedHikeId ? 'crosshair' : 'grab'}
       onMouseMove={(event) => {
-        const hikeId: unknown = event.features?.[0]?.properties?.hikeId;
+        const hit = event.features?.find((feature) => feature.layer.id === 'hikes-hit');
+        const hikeId: unknown = hit?.properties?.hikeId;
         onHikeHover(typeof hikeId === 'string' ? hikeId : null, event.lngLat);
+      }}
+      onClick={(event) => {
+        const itemIn = (layer: string): unknown =>
+          event.features?.find((feature) => feature.layer.id === layer)?.properties?.itemId;
+        setOpenStation(stations.find(({ id }) => id === itemIn('charging-stations')) ?? null);
+        setOpenPoi(pois.find(({ id }) => id === itemIn('poi-points')) ?? null);
       }}
       onContextMenu={(event) => {
         event.preventDefault();
@@ -178,10 +213,48 @@ export function TripMap({
       }}
     >
       <NavigationControl showCompass={false} />
+      {(Object.keys(BASE_LAYERS) as Settings['mapBaseLayer'][]).map((id) => {
+        const { tiles, maxzoom, attribution } = BASE_LAYERS[id];
+        return (
+          <Source
+            key={id}
+            type="raster"
+            tiles={[tiles]}
+            tileSize={256}
+            maxzoom={maxzoom}
+            attribution={attribution}
+          >
+            <Layer
+              id={`base-${id}`}
+              type="raster"
+              layout={{ visibility: id === baseLayer ? 'visible' : 'none' }}
+              paint={{ 'raster-opacity': view.baseOpacity }}
+            />
+          </Source>
+        );
+      })}
+      {OVERLAYS.map(({ id, tiles, maxzoom, opacity }) => (
+        <Source
+          key={id}
+          type="raster"
+          tiles={[tiles]}
+          tileSize={256}
+          maxzoom={maxzoom}
+          attribution="© IGN"
+        >
+          <Layer
+            id={`overlay-${id}`}
+            type="raster"
+            layout={{ visibility: view.overlays.includes(id) ? 'visible' : 'none' }}
+            paint={{ 'raster-opacity': opacity }}
+          />
+        </Source>
+      ))}
       <Source type="geojson" data={driveLines(legs)}>
         <Layer
           id="drives"
           type="line"
+          layout={shown('drives')}
           paint={{ 'line-color': ['get', 'color'], 'line-width': 3, 'line-opacity': 0.9 }}
         />
       </Source>
@@ -189,6 +262,7 @@ export function TripMap({
         <Layer
           id="hikes-unplanned"
           type="line"
+          layout={shown('hikes')}
           paint={{ 'line-color': '#525252', 'line-width': 3, 'line-dasharray': [2, 1.5] }}
         />
       </Source>
@@ -196,6 +270,7 @@ export function TripMap({
         <Layer
           id="hikes-backup"
           type="line"
+          layout={shown('hikes')}
           paint={{
             'line-color': ['get', 'color'],
             'line-width': 3,
@@ -207,11 +282,13 @@ export function TripMap({
         <Layer
           id="hikes-casing"
           type="line"
+          layout={shown('hikes')}
           paint={{ 'line-color': '#ffffff', 'line-width': 7 }}
         />
         <Layer
           id="hikes"
           type="line"
+          layout={shown('hikes')}
           paint={{ 'line-color': ['get', 'color'], 'line-width': 4 }}
         />
       </Source>
@@ -222,25 +299,57 @@ export function TripMap({
         <Layer
           id="hikes-highlight"
           type="line"
+          layout={shown('hikes')}
           filter={['==', ['get', 'hikeId'], highlightedHikeId ?? '']}
           paint={{ 'line-color': '#f59e0b', 'line-width': 5 }}
         />
         <Layer
           id="hikes-hit"
           type="line"
+          layout={shown('hikes')}
           paint={{ 'line-color': '#000000', 'line-opacity': 0, 'line-width': 16 }}
         />
       </Source>
-      {stops.map((stop, index) => (
+      <Source type="geojson" data={points(pois)}>
+        <Layer
+          id="poi-points"
+          type="circle"
+          layout={shown('pois')}
+          paint={{
+            'circle-color': '#2563eb',
+            'circle-radius': 4.5,
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-width': 1.5,
+          }}
+        />
+      </Source>
+      <Source type="geojson" data={points(stations)}>
+        <Layer
+          id="charging-stations"
+          type="circle"
+          layout={shown('stations')}
+          paint={{
+            'circle-color': '#16a34a',
+            'circle-radius': 5,
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-width': 1.5,
+          }}
+        />
+      </Source>
+      {!view.hidden.includes('stops') && stops.map((stop, index) => (
         <Marker
           key={stop.id}
           longitude={stop.location.lng}
           latitude={stop.location.lat}
           anchor="center"
+          onClick={(event) => {
+            event.originalEvent.stopPropagation();
+            if (stop.placeId) onOpenPlace(stop.placeId);
+          }}
         >
           <span
             title={`${index + 1}. ${stop.name}`}
-            className="flex items-center gap-1 rounded-full bg-white px-1.5 py-0.5 text-xs font-semibold text-neutral-900 shadow ring-1 ring-black/20"
+            className="flex cursor-pointer items-center gap-1 rounded-full bg-white px-1.5 py-0.5 text-xs font-semibold text-neutral-900 shadow ring-1 ring-black/20"
           >
             {stop.kind === 'hike' ? (
               <Footprints className="size-3" aria-hidden />
@@ -255,6 +364,53 @@ export function TripMap({
         <Marker longitude={cursor.lng} latitude={cursor.lat} anchor="center">
           <span className="block size-3.5 rounded-full border-2 border-white bg-amber-500 shadow" />
         </Marker>
+      )}
+      {openPoi && (
+        <Popup
+          longitude={openPoi.location.lng}
+          latitude={openPoi.location.lat}
+          closeOnClick={false}
+          onClose={() => setOpenPoi(null)}
+        >
+          <div className="grid gap-1 text-xs text-neutral-900">
+            <p className="font-semibold">{openPoi.name}</p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-foreground"
+              onClick={() => {
+                setOpenPoi(null);
+                onAddPoi(openPoi);
+              }}
+            >
+              Ajouter au voyage
+            </Button>
+          </div>
+        </Popup>
+      )}
+      {openStation && (
+        <Popup
+          longitude={openStation.location.lng}
+          latitude={openStation.location.lat}
+          closeOnClick={false}
+          onClose={() => setOpenStation(null)}
+        >
+          <div className="grid gap-1 text-xs text-neutral-900">
+            <p className="font-semibold">{openStation.name}</p>
+            <p>{formatStation(openStation)}</p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-foreground"
+              onClick={() => {
+                setOpenStation(null);
+                onAddStation(openStation);
+              }}
+            >
+              Ajouter au voyage
+            </Button>
+          </div>
+        </Popup>
       )}
       {menuAt && (
         <Popup

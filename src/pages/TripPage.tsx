@@ -1,9 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, BookOpenText, Footprints, Pencil, Redo2, Trash2, Undo2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  BookOpenText,
+  Footprints,
+  Pencil,
+  Redo2,
+  Trash2,
+  Undo2,
+  Zap,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { AlertBadges, AlertsPanel } from '@/components/AlertsPanel';
+import { AssistantPanel } from '@/components/AssistantPanel';
+import { ChargeDialog, type ChargeTarget } from '@/components/ChargeDialog';
 import { DayBoard } from '@/components/DayBoard';
 import { DaySummary } from '@/components/DaySummary';
 import { ExportDialog } from '@/components/ExportDialog';
@@ -14,19 +25,34 @@ import { LegRows } from '@/components/LegRows';
 import { LibraryPanel } from '@/components/LibraryPanel';
 import { PlaceDialog } from '@/components/PlaceDialog';
 import { PlaceIcon } from '@/components/PlaceIcon';
+import { PreparationPanel } from '@/components/PreparationPanel';
 import { hikeSummary, StopDetails } from '@/components/StopDetails';
 import { StopDialog, type StopValues } from '@/components/StopDialog';
 import { TripFields } from '@/components/TripFields';
+import { TripStatsCard } from '@/components/TripStatsCard';
 import type { MapFocus } from '@/components/TripMap';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/api';
-import { useItinerary, useSettings } from '@/lib/hooks';
+import { useItinerary, useSettings, useWeather } from '@/lib/hooks';
 import { PLACE_TYPE_LABELS } from '@/lib/labels';
 import { type Alert, computeAlerts } from '../../shared/alerts';
+import { type AssistantOp, applyOps } from '../../shared/assistant-ops';
+import { formatClock } from '../../shared/format';
 import { emptyHistory, record, redo, undo } from '../../shared/history';
-import type { Day, Hike, LatLng, Place, Stop, Trip } from '../../shared/schema';
+import type {
+  ChargingStation,
+  Day,
+  Hike,
+  LatLng,
+  Place,
+  Poi,
+  Stop,
+  Trip,
+} from '../../shared/schema';
+import { daySchedule } from '../../shared/schedule';
+import { daySun, sunTimes } from '../../shared/sun';
 import { dayTotals } from '../../shared/totals';
 import {
   addHikes,
@@ -35,6 +61,7 @@ import {
   addPlaceStop,
   addRecoveryStop,
   convertToOutAndBack,
+  insertChargeStop,
   moveStop,
   planHike,
   planPlace,
@@ -42,7 +69,9 @@ import {
   removePlace,
   removeStop,
   replaceHikeTrack,
+  setDogPolicies,
   setStopDuration,
+  setStopStartTime,
   setStopPlaces,
   updateDay,
   updateHike,
@@ -57,6 +86,7 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
   const queryKey = ['trip', slug];
   const settings = useSettings();
   const itinerary = useItinerary(trip);
+  const weather = useWeather(trip);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [openHikeId, setOpenHikeId] = useState<string | null>(null);
   const [importing, setImporting] = useState<Hike[] | null>(null);
@@ -65,6 +95,9 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
   const [dayFilter, setDayFilter] = useState<number | null>(null);
   const [placeEditing, setPlaceEditing] = useState<PlaceEditing | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [chargingMinKw, setChargingMinKw] = useState(50);
+  const [charging, setCharging] = useState<ChargeTarget | null>(null);
+  const [poiRequested, setPoiRequested] = useState(false);
   const [history, setHistory] = useState(emptyHistory<Trip>);
 
   // Mise à jour optimiste pour qu'une étape déposée ne revienne pas à sa place en attendant le
@@ -72,8 +105,8 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
   const saveTrip = useMutation({
     mutationFn: api.saveTrip,
     scope: { id: `trip-${slug}` },
-    onMutate: async (next: Trip) => {
-      await queryClient.cancelQueries({ queryKey });
+    onMutate: (next: Trip) => {
+      void queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData<Trip>(queryKey);
       queryClient.setQueryData(queryKey, next);
       return { previous };
@@ -224,6 +257,27 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
     );
   };
 
+  /** Revalide sur le voyage actuel : il a pu changer depuis la proposition. */
+  const applyProposal = (ops: AssistantOp[]): string | null => {
+    const result = applyOps(trip, ops);
+    if (!result.ok) return result.error;
+    save(result.trip);
+    return null;
+  };
+
+  const addStation = (station: ChargingStation) => setCharging({ station });
+
+  const addPoi = (poi: Poi) => {
+    if (trip.places.some(({ name }) => name === poi.name)) {
+      toast.info(`${poi.name} est déjà dans le voyage`);
+      return;
+    }
+    const type: Place['type'] =
+      poi.kind === 'parking' ? 'parking' : poi.kind === 'water' ? 'poi' : 'lodging';
+    save(addPlace(trip, { id: crypto.randomUUID(), type, name: poi.name, location: poi.location }));
+    toast.success(`${poi.name} ajouté aux lieux`);
+  };
+
   const legs = useMemo(() => itinerary.data?.legs ?? [], [itinerary.data]);
   const alerts = useMemo(() => computeAlerts(trip, legs, settings), [trip, legs, settings]);
 
@@ -234,6 +288,37 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
   const stopName = (stop: Stop) =>
     (stop.kind === 'hike' ? findHike(stop.hikeId)?.name : undefined) ?? stopStay(stop)?.name;
   const openHike = openHikeId ? findHike(openHikeId) : undefined;
+
+  const renderHikeTiming = (stop: Stop, hike: Hike) => {
+    if (stop.kind !== 'hike') return null;
+    const day = trip.days.find(({ stops }) => stops.includes(stop));
+    if (!day) return null;
+    const timing = daySchedule(trip, day, legs, settings.dayStartTime).stops.find(
+      ({ stopId }) => stopId === stop.id,
+    );
+    if (!timing) return null;
+    const afterSunset = timing.endMin > sunTimes(day.date, hike.start).sunsetMin;
+    return (
+      <label className="mt-1 flex items-center gap-2 text-sm text-muted-foreground tabular-nums">
+        Départ
+        <Input
+          key={stop.startTime ?? formatClock(timing.startMin)}
+          type="time"
+          aria-label={`Heure de départ de ${hike.name}`}
+          className="h-7 w-28"
+          defaultValue={stop.startTime ?? formatClock(timing.startMin)}
+          onBlur={(event) => {
+            const value = event.target.value || undefined;
+            const unchanged = value === (stop.startTime ?? formatClock(timing.startMin));
+            if (!unchanged) save(setStopStartTime(trip, stop.id, value));
+          }}
+        />
+        <span className={afterSunset ? 'text-destructive' : undefined}>
+          fin ≈ {formatClock(timing.endMin)}
+        </span>
+      </label>
+    );
+  };
 
   const renderStop = (stop: Stop) => {
     const hike = stop.kind === 'hike' ? findHike(stop.hikeId) : undefined;
@@ -253,6 +338,7 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
             stay={stay}
             onOpen={() => setOpenHikeId(hike.id)}
             onShowOnMap={() => selectHike(hike)}
+            extra={renderHikeTiming(stop, hike)}
           />
         ) : (
           stay && (
@@ -290,6 +376,21 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
           )
         )}
         <div className="flex shrink-0">
+          {trip.travelers.electricVehicle && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Ajouter une recharge avant ${name}`}
+              title="Ajouter une recharge avant cette étape"
+              onClick={() => {
+                const day = trip.days.find((candidate) => candidate.stops.includes(stop));
+                const position = day?.stops.indexOf(stop) ?? 0;
+                setCharging({ slotKey: `${day?.index}:${position}` });
+              }}
+            >
+              <Zap aria-hidden />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -362,11 +463,18 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
 
         <TripFields trip={trip} onSave={save} />
 
+        <TripStatsCard trip={trip} legs={legs} />
+
+        <AssistantPanel trip={trip} onApply={applyProposal} />
+
+        <PreparationPanel trip={trip} onSave={save} />
+
         <AlertsPanel
           alerts={alerts}
           onFocus={focusAlert}
           onConvert={(hikeId) => save(convertToOutAndBack(trip, hikeId, settings.pace))}
           onAddRecovery={(stopId) => save(addRecoveryStop(trip, stopId))}
+          onSetDogPolicy={(ids, policy) => save(setDogPolicies(trip, ids, policy))}
         />
 
         <DayBoard
@@ -378,6 +486,8 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
               trip={trip}
               day={day}
               totals={dayTotals(trip, day, legs, settings.dayStartTime)}
+              sun={daySun(trip, day)}
+              weather={weather.data?.[day.index]}
               thresholds={settings.thresholds}
               onChange={(changes) => save(updateDay(trip, day.index, changes))}
             />
@@ -390,6 +500,19 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
               legs={legs.filter((leg) => leg.stopId === stop.id && leg.phase === phase)}
             />
           )}
+          renderDayAction={(day) =>
+            trip.travelers.electricVehicle && (
+              <Button
+                variant="outline"
+                size="sm"
+                aria-label={`Ajouter une recharge au jour ${day.index}`}
+                onClick={() => setCharging({ slotKey: `${day.index}:end` })}
+              >
+                <Zap aria-hidden />
+                Recharge
+              </Button>
+            )
+          }
           renderDayEnd={(day) => {
             const dayEnd = legs.filter(
               (leg) => leg.dayIndex === day.index && leg.phase === 'end',
@@ -409,6 +532,13 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
               onPlanPlace={(placeId, dayIndex) => save(planPlace(trip, dayIndex, placeId))}
               onOpenPlace={(place) => setPlaceEditing({ place })}
               onAddPlace={() => setPlaceEditing({})}
+              onDeletePlace={(placeId) => save(removePlace(trip, placeId))}
+              chargingMinKw={chargingMinKw}
+              onChargingMinKwChange={setChargingMinKw}
+              onAddStation={addStation}
+              poiRequested={poiRequested}
+              onRequestPoi={() => setPoiRequested(true)}
+              onAddPoi={addPoi}
             />
           }
           onMove={save}
@@ -426,6 +556,14 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
         dayFilter={dayFilter}
         onDayFilterChange={selectDay}
         onAddPlaceAt={(location) => setPlaceEditing({ location })}
+        onOpenPlace={(placeId) => {
+          const place = findPlace(placeId);
+          if (place) setPlaceEditing({ place });
+        }}
+        chargingMinKw={chargingMinKw}
+        onAddStation={addStation}
+        poiRequested={poiRequested}
+        onAddPoi={addPoi}
       />
 
       {editing?.kind === 'add' && (
@@ -444,6 +582,24 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
           title="Modifier l'étape"
           onClose={() => setEditing(null)}
           onSubmit={(values) => editStop(editing.stop, values)}
+        />
+      )}
+      {charging && (
+        <ChargeDialog
+          trip={trip}
+          target={charging}
+          minKw={chargingMinKw}
+          onClose={() => setCharging(null)}
+          onConfirm={(place, slot, durationMin) => {
+            setCharging(null);
+            save(
+              slot
+                ? insertChargeStop(trip, place, slot.dayIndex, slot.position, durationMin)
+                : trip.places.some(({ id }) => id === place.id)
+                  ? trip
+                  : addPlace(trip, place),
+            );
+          }}
         />
       )}
       {exporting && <ExportDialog trip={trip} onClose={() => setExporting(false)} />}

@@ -1,9 +1,9 @@
-import { BedDouble, Fuel, MapPin, SquareParking, Utensils } from 'lucide-react';
+import { BedDouble, MapPin, SquareParking, Utensils, Zap } from 'lucide-react';
 import type { PlaceType } from '../../shared/schema';
 
 const ICONS = {
   lodging: BedDouble,
-  charging: Fuel,
+  charging: Zap,
   food: Utensils,
   parking: SquareParking,
   poi: MapPin,

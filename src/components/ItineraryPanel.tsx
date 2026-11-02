@@ -5,15 +5,23 @@ import { toast } from 'sonner';
 import { ProfileChart } from '@/components/ProfileChart';
 import { type MapFocus, TripMap } from '@/components/TripMap';
 import { LabeledSelect } from '@/components/HikeSelects';
+import { LayersMenu } from '@/components/LayersMenu';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
-import { itineraryKey, useItinerary, useSettings } from '@/lib/hooks';
+import {
+  itineraryKey,
+  useChargingStations,
+  useItinerary,
+  usePois,
+  useSettings,
+} from '@/lib/hooks';
 import { TRAIL_TO_STAY_COLOR } from '@/lib/labels';
+import { mapViewOf } from '@/lib/map-layers';
 import { cn } from '@/lib/utils';
 import { formatDuration, formatKm } from '../../shared/format';
 import { itineraryTotals } from '../../shared/itinerary';
 import { buildProfile, nearestPointIndex } from '../../shared/profile';
-import type { LatLng, Trip } from '../../shared/schema';
+import type { ChargingStation, LatLng, Poi, Trip } from '../../shared/schema';
 
 export function ItineraryPanel({
   trip,
@@ -22,6 +30,11 @@ export function ItineraryPanel({
   dayFilter,
   onDayFilterChange,
   onAddPlaceAt,
+  onOpenPlace,
+  chargingMinKw,
+  onAddStation,
+  poiRequested,
+  onAddPoi,
 }: {
   trip: Trip;
   focus: MapFocus | null;
@@ -29,10 +42,17 @@ export function ItineraryPanel({
   dayFilter: number | null;
   onDayFilterChange: (dayIndex: number | null) => void;
   onAddPlaceAt: (location: LatLng) => void;
+  onOpenPlace: (placeId: string) => void;
+  chargingMinKw: number;
+  onAddStation: (station: ChargingStation) => void;
+  poiRequested: boolean;
+  onAddPoi: (poi: Poi) => void;
 }) {
   const queryClient = useQueryClient();
   const settings = useSettings();
   const itinerary = useItinerary(trip);
+  const stations = useChargingStations(trip, chargingMinKw);
+  const pois = usePois(trip, poiRequested);
   const [hoveredHikeId, setHoveredHikeId] = useState<string | null>(null);
   const [cursorIndex, setCursorIndex] = useState<number | null>(null);
 
@@ -94,6 +114,7 @@ export function ItineraryPanel({
               onChange={(value) => onDayFilterChange(value === 'all' ? null : Number(value))}
             />
           </div>
+          <LayersMenu settings={settings} />
           <Button size="sm" variant="outline" disabled={busy} onClick={() => refresh.mutate()}>
             <RefreshCw className={cn(busy && 'animate-spin')} aria-hidden />
             Actualiser
@@ -120,7 +141,13 @@ export function ItineraryPanel({
           focus={focus}
           dayFilter={dayFilter}
           onAddPlaceAt={onAddPlaceAt}
+          onOpenPlace={onOpenPlace}
+          stations={trip.travelers.electricVehicle ? (stations.data ?? []) : []}
+          onAddStation={onAddStation}
+          pois={pois.data ?? []}
+          onAddPoi={onAddPoi}
           baseLayer={settings.mapBaseLayer}
+          view={mapViewOf(settings)}
           highlightedHikeId={hoveredHikeId ?? (selectedIds.length === 1 ? selectedIds[0]! : null)}
           cursor={cursorPoint ?? null}
           onHikeHover={handleHikeHover}

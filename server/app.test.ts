@@ -12,6 +12,7 @@ import {
   type TripSummary,
 } from '../shared/schema';
 import { createApp } from './app';
+import type { AssistantProvider } from './assistant-provider';
 
 const newTrip: NewTrip = {
   name: 'Dévoluy & Champsaur',
@@ -43,7 +44,7 @@ describe('API voyages', () => {
 
   beforeEach(async () => {
     dir = await mkdtemp(path.join(tmpdir(), 'trailplan-'));
-    app = createApp({ tripsDir: dir, health: () => ({ ors: 'missing', notion: 'missing' }) });
+    app = createApp({ tripsDir: dir, health: () => ({ ors: 'missing', notion: 'missing', assistant: 'missing', assistantProviders: [] }) });
   });
 
   afterEach(async () => {
@@ -60,7 +61,7 @@ describe('API voyages', () => {
     expect(created.origin).toBeUndefined();
 
     // Une nouvelle instance simule le redémarrage du serveur.
-    app = createApp({ tripsDir: dir, health: () => ({ ors: 'missing', notion: 'missing' }) });
+    app = createApp({ tripsDir: dir, health: () => ({ ors: 'missing', notion: 'missing', assistant: 'missing', assistantProviders: [] }) });
     expect(await (await request(`/api/trips/${created.slug}`)).json()).toEqual(created);
   });
 
@@ -235,6 +236,25 @@ describe('API voyages', () => {
     );
   });
 
+  it('ne réécrit pas les voyages pour un réglage de carte', async () => {
+    const { slug } = await createTrip();
+    const file = path.join(dir, slug, 'trip.json');
+    await writeFile(file, `${await readFile(file, 'utf8')}\n`);
+    const before = await readFile(file, 'utf8');
+
+    const response = await request('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ ...DEFAULT_SETTINGS, mapOverlays: ['relief'], mapBaseOpacity: 0.5 }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await readFile(file, 'utf8')).toBe(before);
+    expect(await (await request('/api/settings')).json()).toMatchObject({
+      mapOverlays: ['relief'],
+      mapBaseOpacity: 0.5,
+    });
+  });
+
   it('refuse des réglages invalides', async () => {
     const response = await request('/api/settings', { method: 'PUT', body: '{"pace":{}}' });
     expect(response.status).toBe(400);
@@ -261,6 +281,65 @@ describe('API voyages', () => {
     expect(((await saved.json()) as Trip).notion).toEqual({ projectPageId: 'abc' });
   });
 
+  it('explique que l’assistant est désactivé sans clé', async () => {
+    const { slug } = await createTrip();
+    const response = await post(`/api/trips/${slug}/assistant`, {
+      conversationId: 'c',
+      message: 'bonjour',
+    });
+    expect(response.status).toBe(503);
+  });
+
+  it('diffuse un tour de l’assistant, ligne par ligne', async () => {
+    const fake = (reply: string): AssistantProvider => ({
+      id: reply === 'Claude' ? 'anthropic' : 'openai',
+      describeError: () => 'panne',
+      start: () => ({
+        addUserMessage: () => {},
+        addToolResults: () => {},
+        async *complete() {
+          yield reply;
+          return {
+            stop: 'end' as const,
+            toolCalls: [],
+            usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, costUsd: null },
+          };
+        },
+      }),
+    });
+    app = createApp({
+      tripsDir: dir,
+      assistants: [fake('Claude'), fake('ChatGPT')],
+      health: () => ({
+        ors: 'missing',
+        notion: 'missing',
+        assistant: 'configured',
+        assistantProviders: ['anthropic', 'openai'],
+      }),
+    });
+    const { slug } = await createTrip();
+
+    const response = await post(`/api/trips/${slug}/assistant`, {
+      conversationId: 'c',
+      message: 'bonjour',
+    });
+
+    const lines = (await response.text()).trim().split('\n').map((line) => JSON.parse(line));
+    expect(lines.map(({ type }) => type)).toEqual(['text', 'done']);
+    expect(lines[0].text).toBe('Claude');
+
+    await request('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ ...DEFAULT_SETTINGS, assistantProvider: 'openai' }),
+    });
+    const switched = await post(`/api/trips/${slug}/assistant`, {
+      conversationId: 'c',
+      message: 'bonjour',
+    });
+    expect(await switched.text()).toContain('ChatGPT');
+    expect((await post(`/api/trips/${slug}/assistant`, { message: '' })).status).toBe(400);
+  });
+
   it('prévisualise le carnet, et refuse d’exporter sans token', async () => {
     const { slug } = await createTrip();
     const preview = await post(`/api/trips/${slug}/notion/preview`, {});
@@ -276,6 +355,8 @@ describe('API voyages', () => {
     expect(await (await request('/api/health')).json()).toEqual({
       ors: 'missing',
       notion: 'missing',
+      assistant: 'missing',
+      assistantProviders: [],
     });
   });
 });

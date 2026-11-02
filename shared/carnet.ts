@@ -1,12 +1,17 @@
 import type { Alert, AlertCode } from './alerts';
 import {
+  formatClock,
   formatDay,
   formatDuration,
   formatElevationGain,
   formatKm,
 } from './format';
+import { EXPENSE_LABELS, tripBudget } from './budget';
 import { deriveLegs, plannedStops } from './itinerary';
-import type { Day, Hike, ItineraryLeg, Place, Trip } from './schema';
+import { daySchedule } from './schedule';
+import { DEFAULT_SETTINGS, type Day, type Hike, type ItineraryLeg, type Place, type Trip } from './schema';
+import { daySun } from './sun';
+import { tripStats } from './totals';
 import { nightOf } from './trip';
 
 export const CARNET_TITLE = '🗺️ Carnet d’itinéraire — généré par Trailplan';
@@ -19,7 +24,7 @@ export type CarnetBlock =
   | { type: 'heading'; text: string }
   | { type: 'paragraph'; text: Inline[] }
   | { type: 'bullet'; text: Inline[] }
-  | { type: 'todo'; text: Inline[] }
+  | { type: 'todo'; text: Inline[]; checked?: boolean }
   | { type: 'table'; header: string[]; rows: Inline[][][] };
 
 const STATUS_LABELS: Record<AlertCode, string> = {
@@ -31,6 +36,7 @@ const STATUS_LABELS: Record<AlertCode, string> = {
   A6: '',
   A7: 'Trajet estimé',
   A8: 'Hébergement à réserver',
+  A9: 'Fin après le coucher du soleil',
 };
 
 const BOOKING: Record<NonNullable<Place['bookingStatus']>, string> = {
@@ -55,29 +61,19 @@ function hikesOf(trip: Trip, day: Day): Hike[] {
   });
 }
 
-function dayTotalsOf(trip: Trip, legs: ItineraryLeg[]) {
-  const hikes = trip.days.flatMap((day) => hikesOf(trip, day));
-  return {
-    km: hikes.reduce((sum, hike) => sum + hike.stats.distanceKm, 0),
-    gain: hikes.reduce((sum, hike) => sum + (hike.stats.elevationGainM ?? 0), 0),
-    hikingMin: hikes.reduce((sum, hike) => sum + hike.stats.estimatedDurationMin, 0),
-    drivingMin: legs.reduce((sum, leg) => sum + leg.durationMin, 0),
-  };
-}
-
 function nightsLabel(count: number): string {
   return count > 1 ? `${count} nuits` : `${count} nuit`;
 }
 
 /** Résumé de la propriété `Outcome` (SPEC §8). */
 export function carnetOutcome(trip: Trip): string {
-  const { km, gain } = dayTotalsOf(trip, []);
+  const { hikingKm, elevationGainM } = tripStats(trip, []);
   const days = trip.days.length;
   const departure = deriveLegs(trip)[0]?.fromName ?? plannedStops(trip)[0]?.name;
   const parts = [
     `${days} ${days > 1 ? 'jours' : 'jour'} / ${nightsLabel(days - 1)}`,
-    formatKm(km),
-    formatElevationGain(gain),
+    formatKm(hikingKm),
+    formatElevationGain(elevationGainM),
   ];
   return [...parts, ...(departure ? [`départ ${departure}`] : [])].join(', ');
 }
@@ -90,7 +86,14 @@ function dayStatus(alerts: Alert[], day: Day): string {
   return labels.length > 0 ? [...new Set(labels)].join(', ') : 'OK';
 }
 
-function daySection(trip: Trip, day: Day, legs: ItineraryLeg[]): CarnetBlock[] {
+function daySection(
+  trip: Trip,
+  day: Day,
+  legs: ItineraryLeg[],
+  dayStartTime: string,
+): CarnetBlock[] {
+  const schedule = daySchedule(trip, day, legs, dayStartTime);
+  const sun = daySun(trip, day);
   const dayLegs = legs.filter((leg) => leg.dayIndex === day.index);
   const driveBullets = (stopId: string | null, phase: ItineraryLeg['phase']): CarnetBlock[] =>
     dayLegs
@@ -109,6 +112,7 @@ function daySection(trip: Trip, day: Day, legs: ItineraryLeg[]): CarnetBlock[] {
       const hike = trip.hikes.find(({ id }) => id === stop.hikeId);
       if (!hike) return [];
       const { distanceKm, elevationGainM, estimatedDurationMin } = hike.stats;
+      const timing = schedule.stops.find(({ stopId }) => stopId === stop.id);
       const stats = [
         formatKm(distanceKm),
         ...(elevationGainM === null ? [] : [formatElevationGain(elevationGainM)]),
@@ -121,7 +125,9 @@ function daySection(trip: Trip, day: Day, legs: ItineraryLeg[]): CarnetBlock[] {
           text: [
             { text: '🥾 ' },
             hike.alltrailsUrl ? { text: hike.name, url: hike.alltrailsUrl } : { text: hike.name },
-            { text: ` : ${stats}` },
+            {
+              text: ` : ${stats}${timing ? ` (${formatClock(timing.startMin)} → ${formatClock(timing.endMin)})` : ''}`,
+            },
           ],
         },
         ...driveBullets(stop.id, 'stay'),
@@ -139,6 +145,18 @@ function daySection(trip: Trip, day: Day, legs: ItineraryLeg[]): CarnetBlock[] {
   const backups = trip.hikes.filter(({ id }) => day.backupHikeIds.includes(id));
   return [
     { type: 'heading', text: `J${day.index} — ${day.title || formatDay(day.date)}` },
+    ...(sun
+      ? [
+          {
+            type: 'bullet' as const,
+            text: [
+              {
+                text: `☀️ Lever ${formatClock(sun.sunriseMin)}, coucher ${formatClock(sun.sunsetMin)}`,
+              },
+            ],
+          },
+        ]
+      : []),
     ...timeline,
     ...driveBullets(null, 'end'),
     ...(night
@@ -169,14 +187,15 @@ export function buildCarnet(
   legs: ItineraryLeg[],
   alerts: Alert[],
   exportedAt: Date,
+  dayStartTime: string = DEFAULT_SETTINGS.dayStartTime,
 ): CarnetBlock[] {
-  const totals = dayTotalsOf(trip, legs);
+  const totals = tripStats(trip, legs);
   const days = trip.days.length;
   const recap = [
     `Du ${formatDay(trip.startDate)} au ${formatDay(trip.endDate)}`,
     `${days} ${days > 1 ? 'jours' : 'jour'} / ${nightsLabel(days - 1)}`,
-    formatKm(totals.km),
-    formatElevationGain(totals.gain),
+    formatKm(totals.hikingKm),
+    formatElevationGain(totals.elevationGainM),
     `${formatDuration(totals.hikingMin)} de marche`,
     `${formatDuration(totals.drivingMin)} de route`,
     `Export du ${exportedAt.toISOString().slice(0, 10)}`,
@@ -216,6 +235,8 @@ export function buildCarnet(
   });
 
   const checks = alerts.filter(({ level }) => level !== 'info');
+  const budget = tripBudget(trip);
+  const checklist = trip.checklist ?? [];
 
   return [
     { type: 'callout', text: [{ text: recap }] },
@@ -224,7 +245,7 @@ export function buildCarnet(
       header: ['Jour', 'Secteur et marche', 'Distance / dénivelé', 'Route', 'Nuit', 'Statut'],
       rows: dayRows,
     },
-    ...trip.days.flatMap((day) => daySection(trip, day, legs)),
+    ...trip.days.flatMap((day) => daySection(trip, day, legs, dayStartTime)),
     ...(lodgings.length > 0
       ? [
           { type: 'heading' as const, text: 'Hébergements' },
@@ -240,6 +261,34 @@ export function buildCarnet(
           { type: 'heading' as const, text: 'Points à vérifier' },
           ...checks.map(
             (alert): CarnetBlock => ({ type: 'todo', text: [{ text: alert.message }] }),
+          ),
+        ]
+      : []),
+    ...(budget.total > 0
+      ? [
+          { type: 'heading' as const, text: 'Budget' },
+          {
+            type: 'table' as const,
+            header: ['Poste', 'Montant'],
+            rows: [
+              ...budget.byCategory.map(({ category, amount }) => [
+                cell(EXPENSE_LABELS[category]),
+                cell(`${amount} €`),
+              ]),
+              [cell('Total'), cell(`${budget.total} €`)],
+            ],
+          },
+        ]
+      : []),
+    ...(checklist.length > 0
+      ? [
+          { type: 'heading' as const, text: 'Checklist' },
+          ...checklist.map(
+            ({ label, done }): CarnetBlock => ({
+              type: 'todo',
+              text: [{ text: label }],
+              checked: done,
+            }),
           ),
         ]
       : []),
@@ -268,7 +317,7 @@ export function carnetToMarkdown(blocks: CarnetBlock[]): string {
         case 'bullet':
           return `- ${inlineMarkdown(block.text)}`;
         case 'todo':
-          return `- [ ] ${inlineMarkdown(block.text)}`;
+          return `- [${block.checked ? 'x' : ' '}] ${inlineMarkdown(block.text)}`;
         case 'table':
           return [
             `| ${block.header.join(' | ')} |`,

@@ -1,12 +1,14 @@
 import { distance, point } from '@turf/turf';
-import { formatDuration, formatTimeAfter } from './format';
+import { formatClock, formatDuration } from './format';
 import { MIN_DRIVE_KM } from './itinerary';
 import type { Hike, ItineraryLeg, LatLng, Place, Settings, Stop, Trip } from './schema';
-import { dayTotals, timeToMinutes } from './totals';
+import { daySchedule, timeToMinutes } from './schedule';
+import { sunTimes } from './sun';
+import { dayTotals } from './totals';
 import { nightOf, unplanned } from './trip';
 
 export type AlertLevel = 'error' | 'warning' | 'info';
-export type AlertCode = 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6' | 'A7' | 'A8';
+export type AlertCode = 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6' | 'A7' | 'A8' | 'A9';
 
 export type Alert = {
   id: string;
@@ -48,7 +50,7 @@ function thresholdAlerts(trip: Trip, legs: ItineraryLeg[], settings: Settings): 
         `${Math.round(totals.elevationGainM)} m D+ pour ${thresholds.maxElevationGainPerDay} m max`,
       thresholds.latestEndTime !== undefined &&
         totals.estimatedEndMinutes > timeToMinutes(thresholds.latestEndTime) &&
-        `fin ≈ ${formatTimeAfter(dayStartTime, totals.activeMin)} pour ${thresholds.latestEndTime} au plus tard`,
+        `fin ≈ ${totals.estimatedEndTime} pour ${thresholds.latestEndTime} au plus tard`,
     ].filter((message) => typeof message === 'string');
     return exceeded.map((detail, index) => ({
       id: `A1-${day.index}-${index}`,
@@ -133,6 +135,32 @@ function crossingAlerts(trip: Trip): Alert[] {
   );
 }
 
+/** Une rando finie après le coucher du soleil (A9), avec le soleil à son point de départ. */
+function daylightAlerts(trip: Trip, legs: ItineraryLeg[], dayStartTime: string): Alert[] {
+  return trip.days.flatMap((day) => {
+    const { stops } = daySchedule(trip, day, legs, dayStartTime);
+    return day.stops.flatMap((stop): Alert[] => {
+      if (stop.kind !== 'hike') return [];
+      const hike = trip.hikes.find(({ id }) => id === stop.hikeId);
+      const endMin = stops.find(({ stopId }) => stopId === stop.id)?.endMin;
+      if (!hike || endMin === undefined) return [];
+      const { sunsetMin } = sunTimes(day.date, hike.start);
+      if (endMin <= sunsetMin) return [];
+      return [
+        {
+          id: `A9-${stop.id}`,
+          code: 'A9',
+          level: 'warning',
+          message: `${hike.name} : fin ≈ ${formatClock(endMin)}, coucher du soleil à ${formatClock(sunsetMin)}`,
+          dayIndex: day.index,
+          hikeId: hike.id,
+          stopId: stop.id,
+        },
+      ];
+    });
+  });
+}
+
 /** Toutes les alertes du voyage (SPEC §5.4). Sans seuil défini, A1 ne se déclenche jamais. */
 export function computeAlerts(trip: Trip, legs: ItineraryLeg[], settings: Settings): Alert[] {
   const lastDay = trip.days.at(-1)?.index;
@@ -180,6 +208,7 @@ export function computeAlerts(trip: Trip, legs: ItineraryLeg[], settings: Settin
     ...nights,
     ...dogAlerts(trip),
     ...crossingAlerts(trip),
+    ...daylightAlerts(trip, legs, settings.dayStartTime),
     ...library,
     ...fallbacks,
     ...bookings,

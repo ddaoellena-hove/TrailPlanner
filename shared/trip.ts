@@ -198,6 +198,97 @@ export function removePlace(trip: Trip, placeId: string): Trip {
   };
 }
 
+/** Applique une politique chiens à plusieurs éléments. Un lieu n'a pas de « laisse » : autorisé. */
+export function setDogPolicies(
+  trip: Trip,
+  ids: string[],
+  policy: Exclude<Hike['dogPolicy'], 'unknown'>,
+): Trip {
+  return {
+    ...trip,
+    hikes: trip.hikes.map((hike) =>
+      ids.includes(hike.id) ? { ...hike, dogPolicy: policy } : hike,
+    ),
+    places: trip.places.map((place) =>
+      ids.includes(place.id)
+        ? { ...place, dogPolicy: policy === 'leash' ? 'allowed' : policy }
+        : place,
+    ),
+  };
+}
+
+/** Endroit où insérer une étape : avant une étape existante, ou en fin de journée. */
+export type StopSlot = {
+  key: string;
+  label: string;
+  dayIndex: number;
+  position: number;
+  location?: LatLng;
+};
+
+export function stopSlots(trip: Trip): StopSlot[] {
+  return trip.days.flatMap((day) => {
+    const resolved = day.stops.map((stop) => {
+      const hike = stop.kind === 'hike' ? trip.hikes.find(({ id }) => id === stop.hikeId) : undefined;
+      const place =
+        stop.kind === 'place' ? trip.places.find(({ id }) => id === stop.placeId) : undefined;
+      return { name: hike?.name ?? place?.name ?? 'étape', location: hike?.start ?? place?.location };
+    });
+    return [
+      ...resolved.map(({ name, location }, position) => ({
+        key: `${day.index}:${position}`,
+        label: `J${day.index} · avant ${name}`,
+        dayIndex: day.index,
+        position,
+        location,
+      })),
+      {
+        key: `${day.index}:end`,
+        label: `J${day.index} · en fin de journée`,
+        dayIndex: day.index,
+        position: day.stops.length,
+        location: resolved.at(-1)?.location,
+      },
+    ];
+  });
+}
+
+/** Insère une étape de recharge, en ajoutant la borne aux lieux si elle n'y est pas encore. */
+export function insertChargeStop(
+  trip: Trip,
+  place: Place,
+  dayIndex: number,
+  position: number,
+  durationMin: number | undefined,
+): Trip {
+  const known = trip.places.some(({ id }) => id === place.id);
+  const stop: Stop = {
+    id: crypto.randomUUID(),
+    kind: 'place',
+    placeId: place.id,
+    ...(durationMin === undefined ? {} : { durationMin }),
+  };
+  return {
+    ...trip,
+    places: known ? trip.places : [...trip.places, place],
+    days: trip.days.map((day) =>
+      day.index === dayIndex ? { ...day, stops: day.stops.toSpliced(position, 0, stop) } : day,
+    ),
+  };
+}
+
+export function setStopStartTime(trip: Trip, stopId: string, startTime: string | undefined): Trip {
+  return {
+    ...trip,
+    days: trip.days.map((day) => ({
+      ...day,
+      stops: day.stops.map((stop) =>
+        stop.id === stopId && stop.kind === 'hike' ? { ...stop, startTime } : stop,
+      ),
+    })),
+  };
+}
+
 export function setStopDuration(trip: Trip, stopId: string, durationMin: number | undefined): Trip {
   return {
     ...trip,

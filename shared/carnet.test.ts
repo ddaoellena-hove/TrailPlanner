@@ -122,6 +122,31 @@ describe('carnet', () => {
     expect(markdown).not.toContain('- [ ] Hôtel du Col : à réserver');
   });
 
+  it('donne le soleil et l’horaire de chaque rando', () => {
+    expect(markdown).toMatch(/☀️ Lever \d\d:\d\d, coucher \d\d:\d\d/);
+    expect(markdown).toContain('3 h 28 (10:44 → 14:12)');
+  });
+
+  it('ajoute budget et checklist, avec l’état des tâches', () => {
+    const { trip, legs } = planned();
+    const blocks = buildCarnet(
+      {
+        ...trip,
+        expenses: [{ id: randomUUID(), label: 'Péage', amount: 25, category: 'toll' }],
+        checklist: [
+          { id: randomUUID(), label: 'Chaînes', done: true },
+          { id: randomUUID(), label: 'Frontale', done: false },
+        ],
+      },
+      legs,
+      [],
+      new Date(),
+    );
+    const text = carnetToMarkdown(blocks);
+    expect(text).toContain('| Total | 115 € |');
+    expect(text).toContain('- [x] Chaînes\n- [ ] Frontale');
+  });
+
   it('finit par le pied de page', () => {
     expect(markdown.endsWith(CARNET_FOOTER)).toBe(true);
   });

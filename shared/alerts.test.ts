@@ -181,6 +181,27 @@ describe('A5 traversées', () => {
   });
 });
 
+describe('A9 coucher du soleil', () => {
+  const winter = {
+    ...oneDay,
+    startDate: '2026-12-12',
+    endDate: '2026-12-12',
+    days: generateDays('2026-12-12', '2026-12-12'),
+  };
+  const long = hike();
+  long.stats = { ...long.stats, estimatedDurationMin: 600 };
+
+  it('se déclenche quand une rando finit à la nuit, en décembre', () => {
+    const alerts = computeAlerts(addHikeStop(winter, 1, long), [], DEFAULT_SETTINGS);
+    expect(alerts.map(({ code }) => code)).toEqual(['A9']);
+    expect(alerts[0]?.message).toMatch(/fin ≈ 18:30, coucher du soleil à 1[67]:\d\d/);
+  });
+
+  it('ne dit rien pour la même rando en juillet', () => {
+    expect(codes(addHikeStop(oneDay, 1, long))).toEqual([]);
+  });
+});
+
 describe('A6 à A8', () => {
   it('A6 : rando dans aucun jour', () => {
     expect(codes(addHikes(oneDay, [hike()]))).toEqual(['A6']);

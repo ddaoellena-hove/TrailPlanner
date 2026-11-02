@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { cp, mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import type { DriveLeg, Hike, NewTrip, Trip, TripSummary } from '../shared/schema';
+import type { DriveLeg, Hike, NewTrip, Poi, Trip, TripSummary } from '../shared/schema';
 import { withPace } from '../shared/gpx';
-import { DriveLegSchema, type Settings, TripSchema } from '../shared/schema';
+import { DriveLegSchema, PoiSchema, type Settings, TripSchema } from '../shared/schema';
 import { parseGpx } from './gpx';
 import { generateDays, slugify, summarizeTrip } from '../shared/trip';
 
@@ -23,6 +23,9 @@ export async function writeAtomic(target: string, content: string | Buffer): Pro
 
 export type RouteCache = Record<string, DriveLeg>;
 const RouteCacheSchema = z.record(z.string(), DriveLegSchema);
+
+const PoiCacheSchema = z.object({ key: z.string(), at: z.number(), pois: z.array(PoiSchema) });
+type PoiCache = { key: string; at: number; pois: Poi[] };
 
 type GpxUpload = { pace: Settings['pace']; bytes: Buffer; fileName: string; name?: string; alltrailsUrl?: string };
 
@@ -123,7 +126,10 @@ export class TripStore {
       name: input.name,
       startDate: input.startDate,
       endDate: input.endDate,
-      travelers: { withDog: input.withDog },
+      travelers: {
+        withDog: input.withDog,
+        ...(input.electricVehicle ? { electricVehicle: true } : {}),
+      },
       hikes: [],
       places: [],
       days: generateDays(input.startDate, input.endDate),
@@ -184,6 +190,19 @@ export class TripStore {
 
   async writeRouteCache(slug: string, cache: RouteCache): Promise<void> {
     await writeAtomic(this.routeCachePath(slug), `${JSON.stringify(cache)}\n`);
+  }
+
+  async readPoiCache(slug: string): Promise<PoiCache | null> {
+    try {
+      const content = await readFile(path.join(this.dir, slug, 'cache', 'poi.json'), 'utf8');
+      return PoiCacheSchema.parse(JSON.parse(content));
+    } catch {
+      return null;
+    }
+  }
+
+  async writePoiCache(slug: string, cache: PoiCache): Promise<void> {
+    await writeAtomic(path.join(this.dir, slug, 'cache', 'poi.json'), JSON.stringify(cache));
   }
 
   /** Copie aussi GPX et cache. Le lien Notion n'est pas repris : la copie ne doit pas écraser le carnet de l'original. */

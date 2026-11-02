@@ -69,7 +69,10 @@ export function toNotionBlocks(blocks: CarnetBlock[]): BlockObjectRequest[] {
         ];
       case 'todo':
         return [
-          { type: 'to_do', to_do: { rich_text: richText(block.text), checked: false } },
+          {
+            type: 'to_do',
+            to_do: { rich_text: richText(block.text), checked: block.checked ?? false },
+          },
         ];
       case 'table':
         return tableBlocks(block.header, block.rows);

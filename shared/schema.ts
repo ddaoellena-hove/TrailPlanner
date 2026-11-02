@@ -100,6 +100,21 @@ export const DaySchema = z.object({
 });
 export type Day = z.infer<typeof DaySchema>;
 
+export const ExpenseSchema = z.object({
+  id: z.uuid(),
+  label: z.string().min(1),
+  amount: z.number().nonnegative(),
+  category: z.enum(['lodging', 'energy', 'toll', 'food', 'activity', 'other']),
+});
+export type Expense = z.infer<typeof ExpenseSchema>;
+
+export const ChecklistItemSchema = z.object({
+  id: z.uuid(),
+  label: z.string().min(1),
+  done: z.boolean(),
+});
+export type ChecklistItem = z.infer<typeof ChecklistItemSchema>;
+
 const endsAfterStart = (dates: { startDate: string; endDate: string }) =>
   dates.endDate >= dates.startDate;
 const endsAfterStartError = {
@@ -117,10 +132,12 @@ export const TripSchema = z
     endDate: IsoDateSchema,
     origin: PlaceSchema.optional(),
     destination: PlaceSchema.optional(),
-    travelers: z.object({ withDog: z.boolean() }),
+    travelers: z.object({ withDog: z.boolean(), electricVehicle: z.boolean().optional() }),
     hikes: z.array(HikeSchema),
     places: z.array(PlaceSchema),
     days: z.array(DaySchema),
+    expenses: z.array(ExpenseSchema).optional(),
+    checklist: z.array(ChecklistItemSchema).optional(),
     notion: z
       .object({
         projectPageId: z.string().optional(),
@@ -141,6 +158,7 @@ export const NewTripSchema = z
     startDate: IsoDateSchema,
     endDate: IsoDateSchema,
     withDog: z.boolean(),
+    electricVehicle: z.boolean().optional(),
   })
   .refine(endsAfterStart, endsAfterStartError);
 export type NewTrip = z.infer<typeof NewTripSchema>;
@@ -186,6 +204,9 @@ export type Itinerary = z.infer<typeof ItinerarySchema>;
 export const GeocodeResultSchema = z.object({ label: z.string(), location: LatLngSchema });
 export type GeocodeResult = z.infer<typeof GeocodeResultSchema>;
 
+export const AssistantProviderIdSchema = z.enum(['anthropic', 'openai']);
+export type AssistantProviderId = z.infer<typeof AssistantProviderIdSchema>;
+
 export const SettingsSchema = z.object({
   pace: z.object({
     flatKmh: z.number().positive(),
@@ -201,9 +222,58 @@ export const SettingsSchema = z.object({
     maxTotalActiveHoursPerDay: z.number().positive().optional(),
     latestEndTime: TimeSchema.optional(),
   }),
-  mapBaseLayer: z.enum(['ign-plan', 'osm']),
+  mapBaseLayer: z.enum(['ign-plan', 'ortho', 'osm']),
+  mapBaseOpacity: z.number().min(0).max(1).optional(),
+  mapOverlays: z.array(z.string()).optional(),
+  mapHiddenLayers: z.array(z.string()).optional(),
+  /** Coût par conversation au-delà duquel l'assistant prévient, en dollars. */
+  assistantBudgetUsd: z.number().positive().optional(),
+  assistantProvider: z.enum(['anthropic', 'openai']).optional(),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
+
+export const ChargingStationSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  address: z.string(),
+  operator: z.string(),
+  location: LatLngSchema,
+  maxPowerKw: z.number().nonnegative(),
+  points: z.number().int().nonnegative(),
+  connectors: z.array(z.string()),
+  hours: z.string().nullable(),
+});
+export type ChargingStation = z.infer<typeof ChargingStationSchema>;
+
+export const DayWeatherSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('forecast'),
+    tempMinC: z.number(),
+    tempMaxC: z.number(),
+    precipitationMm: z.number(),
+    windKmh: z.number(),
+    code: z.number(),
+  }),
+  z.object({ status: z.literal('later'), availableFrom: IsoDateSchema }),
+  z.object({ status: z.literal('unavailable') }),
+]);
+export type DayWeather = z.infer<typeof DayWeatherSchema>;
+
+export const PoiSchema = z.object({
+  id: z.string(),
+  kind: z.enum(['water', 'hut', 'camping', 'parking']),
+  name: z.string(),
+  location: LatLngSchema,
+});
+export type Poi = z.infer<typeof PoiSchema>;
+
+export const MapLinkResultSchema = z.object({
+  name: z.string(),
+  location: LatLngSchema,
+  url: z.string(),
+  approximate: z.boolean(),
+});
+export type MapLinkResult = z.infer<typeof MapLinkResultSchema>;
 
 export const NotionExportRequestSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('create') }),
@@ -231,5 +301,7 @@ export const DEFAULT_SETTINGS: Settings = {
 export const HealthSchema = z.object({
   ors: z.enum(['configured', 'missing', 'invalid']),
   notion: z.enum(['configured', 'missing', 'invalid']),
+  assistant: z.enum(['configured', 'missing']),
+  assistantProviders: z.array(AssistantProviderIdSchema),
 });
 export type Health = z.infer<typeof HealthSchema>;

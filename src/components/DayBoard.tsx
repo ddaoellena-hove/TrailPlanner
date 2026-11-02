@@ -78,6 +78,7 @@ function DayCard({
   summary,
   badges,
   end,
+  action,
   onSelect,
   onAddStop,
   children,
@@ -87,6 +88,7 @@ function DayCard({
   summary: ReactNode;
   badges: ReactNode;
   end: ReactNode;
+  action: ReactNode;
   onSelect: () => void;
   onAddStop: () => void;
   children: ReactNode;
@@ -111,15 +113,18 @@ function DayCard({
           </button>
           {badges}
         </CardTitle>
-        <Button
-          variant="outline"
-          size="sm"
-          aria-label={`Ajouter une étape au jour ${day.index}`}
-          onClick={onAddStop}
-        >
-          <Plus aria-hidden />
-          Étape
-        </Button>
+        <div className="flex shrink-0 gap-2">
+          {action}
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label={`Ajouter une étape au jour ${day.index}`}
+            onClick={onAddStop}
+          >
+            <Plus aria-hidden />
+            Étape
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="grid gap-3">
         {summary}
@@ -142,6 +147,7 @@ export function DayBoard({
   renderBadges,
   renderLegs,
   renderDayEnd,
+  renderDayAction,
   library,
   onMove,
   onDropHike,
@@ -156,6 +162,7 @@ export function DayBoard({
   renderBadges: (day: Day) => ReactNode;
   renderLegs: (stop: Stop, phase: 'enter' | 'stay') => ReactNode;
   renderDayEnd: (day: Day) => ReactNode;
+  renderDayAction: (day: Day) => ReactNode;
   library: ReactNode;
   onMove: (trip: Trip) => void;
   onDropHike: (hikeId: string, dayIndex: number, position: number) => void;
@@ -224,6 +231,7 @@ export function DayBoard({
             summary={renderSummary(day)}
             badges={renderBadges(day)}
             end={renderDayEnd(day)}
+            action={renderDayAction(day)}
             onSelect={() => onSelectDay(day)}
             onAddStop={() => onAddStop(day)}
           >

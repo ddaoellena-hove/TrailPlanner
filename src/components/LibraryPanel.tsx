@@ -1,7 +1,9 @@
 import { useDraggable } from '@dnd-kit/core';
-import { CalendarPlus, Dog, GripVertical, Plus, Upload } from 'lucide-react';
+import { CalendarPlus, Dog, GripVertical, Plus, Trash2, Upload } from 'lucide-react';
 import { type DragEvent, useState } from 'react';
+import { ChargingList } from '@/components/ChargingList';
 import { PlaceIcon } from '@/components/PlaceIcon';
+import { PoiList } from '@/components/PoiList';
 import { hikeSummary } from '@/components/StopDetails';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,7 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BOOKING_LABELS, DOG_LABELS, PLACE_TYPE_LABELS } from '@/lib/labels';
 import { cn } from '@/lib/utils';
 import { formatDay } from '../../shared/format';
-import type { Hike, Place, PlaceType, Trip } from '../../shared/schema';
+import type { ChargingStation, Hike, Place, PlaceType, Poi, Trip } from '../../shared/schema';
 import { unplanned } from '../../shared/trip';
 
 export const libraryDragId = (hikeId: string) => `library-${hikeId}`;
@@ -111,12 +113,14 @@ function LibraryPlace({
   isUnplanned,
   onOpen,
   onPlan,
+  onDelete,
 }: {
   trip: Trip;
   place: Place;
   isUnplanned: boolean;
   onOpen: () => void;
   onPlan: (dayIndex: number) => void;
+  onDelete: () => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: libraryPlaceDragId(place.id),
@@ -147,7 +151,18 @@ function LibraryPlace({
           </div>
         </div>
       </div>
-      {isUnplanned && <PlanInDayMenu trip={trip} name={place.name} onPick={onPlan} />}
+      <div className="flex shrink-0 items-center gap-1">
+        {isUnplanned && <PlanInDayMenu trip={trip} name={place.name} onPick={onPlan} />}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          aria-label={`Supprimer ${place.name}`}
+          onClick={onDelete}
+        >
+          <Trash2 aria-hidden />
+        </Button>
+      </div>
     </li>
   );
 }
@@ -160,6 +175,13 @@ export function LibraryPanel({
   onPlanPlace,
   onOpenPlace,
   onAddPlace,
+  onDeletePlace,
+  chargingMinKw,
+  onChargingMinKwChange,
+  onAddStation,
+  poiRequested,
+  onRequestPoi,
+  onAddPoi,
 }: {
   trip: Trip;
   onImport: (files: File[]) => void;
@@ -168,6 +190,13 @@ export function LibraryPanel({
   onPlanPlace: (placeId: string, dayIndex: number) => void;
   onOpenPlace: (place: Place) => void;
   onAddPlace: () => void;
+  onDeletePlace: (placeId: string) => void;
+  chargingMinKw: number;
+  onChargingMinKwChange: (minKw: number) => void;
+  onAddStation: (station: ChargingStation) => void;
+  poiRequested: boolean;
+  onRequestPoi: () => void;
+  onAddPoi: (poi: Poi) => void;
 }) {
   const [dragOver, setDragOver] = useState(false);
   const library = unplanned(trip);
@@ -258,12 +287,27 @@ export function LibraryPanel({
                         isUnplanned={unplannedIds.has(place.id)}
                         onOpen={() => onOpenPlace(place)}
                         onPlan={(dayIndex) => onPlanPlace(place.id, dayIndex)}
+                        onDelete={() => onDeletePlace(place.id)}
                       />
                     ))}
                   </ul>
                 </section>
               );
             })}
+            <PoiList
+              trip={trip}
+              requested={poiRequested}
+              onRequest={onRequestPoi}
+              onAdd={onAddPoi}
+            />
+            {trip.travelers.electricVehicle && (
+              <ChargingList
+                trip={trip}
+                minKw={chargingMinKw}
+                onMinKwChange={onChargingMinKwChange}
+                onAdd={onAddStation}
+              />
+            )}
           </TabsContent>
         </Tabs>
       </CardContent>
