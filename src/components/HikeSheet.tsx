@@ -1,5 +1,5 @@
 import { ExternalLink, TriangleAlert } from 'lucide-react';
-import { type FormEvent, useMemo, useState } from 'react';
+import { type FormEvent, type ReactNode, useMemo, useState } from 'react';
 import { HikeSelects } from '@/components/HikeSelects';
 import { ProfileChart } from '@/components/ProfileChart';
 import { Button } from '@/components/ui/button';
@@ -28,12 +28,14 @@ export function HikeSheet({
   onSave,
   onReplaceGpx,
   onDelete,
+  outings,
 }: {
   hike: Hike;
   onClose: () => void;
   onSave: (changes: Partial<Hike>) => Promise<unknown>;
   onReplaceGpx: (file: File) => Promise<unknown>;
   onDelete: () => void;
+  outings?: ReactNode;
 }) {
   const [name, setName] = useState(hike.name);
   const [alltrailsUrl, setAlltrailsUrl] = useState(hike.alltrailsUrl ?? '');
@@ -192,6 +194,7 @@ export function HikeSheet({
             <Button type="submit">Enregistrer</Button>
           </div>
         </form>
+        {outings && <div className="mt-4">{outings}</div>}
       </SheetContent>
     </Sheet>
   );

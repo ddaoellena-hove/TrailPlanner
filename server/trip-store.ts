@@ -4,7 +4,13 @@ import path from 'node:path';
 import { z } from 'zod';
 import type { DriveLeg, Hike, NewTrip, Poi, Trip, TripSummary } from '../shared/schema';
 import { withPace } from '../shared/gpx';
-import { DriveLegSchema, PoiSchema, type Settings, TripSchema } from '../shared/schema';
+import {
+  DriveLegSchema,
+  HikeSchema,
+  PoiSchema,
+  type Settings,
+  TripSchema,
+} from '../shared/schema';
 import { parseGpx } from './gpx';
 import { generateDays, slugify, summarizeTrip } from '../shared/trip';
 
@@ -100,6 +106,22 @@ export class TripStore {
     }
   }
 
+  /** GPX des randos d'un voyage, ou de tous. Un voyage ou un fichier illisible est ignoré. */
+  async hikeFiles(slug?: string): Promise<{ hike: Hike; bytes: Buffer }[]> {
+    const files: { hike: Hike; bytes: Buffer }[] = [];
+    for (const current of slug ? [slug] : await this.slugs()) {
+      try {
+        for (const hike of (await this.get(current)).hikes) {
+          const bytes = await readFile(path.join(this.dir, current, hike.gpxFile));
+          files.push({ hike, bytes });
+        }
+      } catch (error) {
+        console.warn(`Voyage ignoré (${current}) :`, error);
+      }
+    }
+    return files;
+  }
+
   async readGpx(slug: string, hikeId: string): Promise<string | null> {
     const hike = (await this.get(slug)).hikes.find(({ id }) => id === hikeId);
     return hike ? readFile(path.join(this.dir, slug, hike.gpxFile), 'utf8') : null;
@@ -166,6 +188,15 @@ export class TripStore {
       dogPolicy: 'unknown',
     };
     return upload.alltrailsUrl ? { ...hike, alltrailsUrl: upload.alltrailsUrl } : hike;
+  }
+
+  /** Copie une rando dans un voyage : sa fiche et son GPX, qui ne dépendent plus de la source. */
+  async copyHike(slug: string, source: Hike, bytes: Buffer): Promise<Hike> {
+    await this.get(slug);
+    const id = randomUUID();
+    const gpxFile = `gpx/${id}.gpx`;
+    await writeAtomic(path.join(this.dir, slug, gpxFile), bytes);
+    return HikeSchema.parse({ ...source, id, gpxFile });
   }
 
   async setNotion(slug: string, notion: NonNullable<Trip['notion']>): Promise<Trip> {

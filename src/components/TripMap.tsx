@@ -16,7 +16,7 @@ import { dayColor, DRIVE_COLOR, TRAIL_TO_STAY_COLOR } from '@/lib/labels';
 import { BASE_LAYERS, type MapView, OVERLAYS, type TripLayerId } from '@/lib/map-layers';
 import { plannedStops } from '../../shared/itinerary';
 import { formatStation } from '@/lib/stations';
-import type { RankedStation } from '../../shared/charging-networks';
+import { type RankedStation, stationReviewsUrl } from '../../shared/charging-networks';
 import type {
   FavoriteStation,
   Hike,
@@ -424,6 +424,14 @@ export function TripMap({
           <div className="grid gap-1 text-xs text-neutral-900">
             <p className="font-semibold">{openStation.name}</p>
             <p>{formatStation(openStation)}</p>
+            <a
+              href={stationReviewsUrl(openStation)}
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              Avis Google Maps
+            </a>
             <Button
               size="sm"
               variant="outline"

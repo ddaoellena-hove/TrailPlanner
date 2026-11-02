@@ -15,6 +15,22 @@ export const NETWORKS_WITHOUT_SOURCE = ['Plug Inn'];
 
 export const DEFAULT_FAVORITE_NETWORKS: string[] = CHARGING_NETWORKS.map(({ id }) => id);
 
+/**
+ * Fiche Google Maps d'une borne, pour lire ses avis. Les noms IRVE sont souvent des codes :
+ * l'opérateur et l'adresse la retrouvent mieux. Un lien collé par l'utilisateur reste prioritaire.
+ */
+export function stationReviewsUrl({
+  name,
+  operator,
+  address,
+  url,
+}: Pick<FavoriteStation, 'name' | 'operator' | 'address' | 'url'>): string {
+  if (url) return url;
+  const place = address ? [operator, address] : [name];
+  const query = ['borne de recharge', ...place].filter(Boolean).join(' ');
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
 export function stationNetwork(names: (string | null)[]): string | null {
   const text = names.filter(Boolean).join(' ');
   return CHARGING_NETWORKS.find(({ pattern }) => pattern.test(text))?.id ?? null;

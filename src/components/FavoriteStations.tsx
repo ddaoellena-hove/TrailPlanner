@@ -1,11 +1,15 @@
-import { Plus, Star, Trash2 } from 'lucide-react';
+import { MessageSquareText, Plus, Star, Trash2 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { MapLinkField } from '@/components/MapLinkField';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useSaveSettings, useSettings } from '@/lib/hooks';
-import { stationFromLink, toggleFavoriteStation } from '../../shared/charging-networks';
+import {
+  stationFromLink,
+  stationReviewsUrl,
+  toggleFavoriteStation,
+} from '../../shared/charging-networks';
 import type { FavoriteStation, MapLinkResult } from '../../shared/schema';
 
 /** Bornes favorites, communes à tous les voyages, ajoutées d'une étoile ou par lien. */
@@ -41,6 +45,17 @@ export function FavoriteStations({ onAdd }: { onAdd: (station: FavoriteStation) 
                 <span className="truncate">{station.name}</span>
               </span>
               <span className="flex shrink-0">
+                <Button asChild variant="ghost" size="icon" className="size-8">
+                  <a
+                    href={stationReviewsUrl(station)}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`Avis Google Maps de ${station.name}`}
+                    title="Avis Google Maps"
+                  >
+                    <MessageSquareText aria-hidden />
+                  </a>
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"

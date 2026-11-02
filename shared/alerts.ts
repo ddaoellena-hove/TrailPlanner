@@ -1,4 +1,5 @@
 import { distance, point } from '@turf/turf';
+import { batteryPlan, batteryWarnings, BATTERY_RESERVE_PERCENT } from './battery';
 import { formatClock, formatDuration } from './format';
 import { MIN_DRIVE_KM } from './itinerary';
 import type { Hike, ItineraryLeg, LatLng, Place, Settings, Stop, Trip } from './schema';
@@ -8,7 +9,7 @@ import { dayTotals } from './totals';
 import { nightOf, unplanned } from './trip';
 
 export type AlertLevel = 'error' | 'warning' | 'info';
-export type AlertCode = 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6' | 'A7' | 'A8' | 'A9';
+export type AlertCode = 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6' | 'A7' | 'A8' | 'A9' | 'A10';
 
 export type Alert = {
   id: string;
@@ -161,6 +162,24 @@ function daylightAlerts(trip: Trip, legs: ItineraryLeg[], dayStartTime: string):
   });
 }
 
+/** Une alerte par recharge manquante, pas une par trajet qui suit. */
+function batteryAlerts(trip: Trip, legs: ItineraryLeg[]): Alert[] {
+  return batteryWarnings(batteryPlan(trip, legs) ?? []).map((step, index) => {
+    const { fromName, toName, dayIndex, stopId } = step.leg;
+    const route = `J${dayIndex} : ${fromName} → ${toName}`;
+    return {
+      id: `A10-${index}`,
+      code: 'A10',
+      level: step.empty ? 'error' : 'warning',
+      message: step.empty
+        ? `${route} : batterie vide avant l'arrivée`
+        : `${route} : ${Math.round(step.toPercent)} % à l'arrivée, sous la réserve de ${BATTERY_RESERVE_PERCENT} %`,
+      dayIndex,
+      stopId: stopId ?? undefined,
+    };
+  });
+}
+
 /** Toutes les alertes du voyage (SPEC §5.4). Sans seuil défini, A1 ne se déclenche jamais. */
 export function computeAlerts(trip: Trip, legs: ItineraryLeg[], settings: Settings): Alert[] {
   const lastDay = trip.days.at(-1)?.index;
@@ -209,6 +228,7 @@ export function computeAlerts(trip: Trip, legs: ItineraryLeg[], settings: Settin
     ...dogAlerts(trip),
     ...crossingAlerts(trip),
     ...daylightAlerts(trip, legs, settings.dayStartTime),
+    ...batteryAlerts(trip, legs),
     ...library,
     ...fallbacks,
     ...bookings,

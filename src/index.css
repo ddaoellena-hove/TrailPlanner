@@ -24,6 +24,14 @@
   --border: oklch(0.91 0.008 140);
   --input: oklch(0.89 0.008 140);
   --ring: oklch(0.6 0.07 155);
+  --tone-distance: oklch(0.45 0.045 170);
+  --tone-ascent: oklch(0.45 0.055 50);
+  --tone-duration: oklch(0.45 0.045 300);
+  --tone-drive: oklch(0.45 0.045 255);
+  --tone-sun: oklch(0.45 0.055 85);
+  --tone-weather: oklch(0.45 0.04 225);
+  --tone-end: oklch(0.45 0.05 145);
+  --tone-warning: oklch(0.45 0.08 25);
 }
 
 .dark {
@@ -46,6 +54,14 @@
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 16%);
   --ring: oklch(0.6 0.07 155);
+  --tone-distance: oklch(0.82 0.045 170);
+  --tone-ascent: oklch(0.82 0.055 50);
+  --tone-duration: oklch(0.82 0.045 300);
+  --tone-drive: oklch(0.82 0.045 255);
+  --tone-sun: oklch(0.82 0.055 85);
+  --tone-weather: oklch(0.82 0.04 225);
+  --tone-end: oklch(0.82 0.05 145);
+  --tone-warning: oklch(0.82 0.08 25);
 }
 
 @theme inline {
@@ -68,6 +84,14 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-tone-distance: var(--tone-distance);
+  --color-tone-ascent: var(--tone-ascent);
+  --color-tone-duration: var(--tone-duration);
+  --color-tone-drive: var(--tone-drive);
+  --color-tone-sun: var(--tone-sun);
+  --color-tone-weather: var(--tone-weather);
+  --color-tone-end: var(--tone-end);
+  --color-tone-warning: var(--tone-warning);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

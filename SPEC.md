@@ -235,6 +235,7 @@ Recalculée pour toutes les randos dès qu'un réglage `pace` change.
 | A7 | Trajet calculé en repli ligne droite (ORS indisponible) | warning |
 | A8 | Hébergement `to-book` ou `idea` | info |
 | A9 | Rando finie après le coucher du soleil, à son point de départ | warning |
+| A10 | Voiture électrique : batterie sous la réserve de 15 % à l'arrivée d'un trajet (warning), ou vide avant l'arrivée (error). Une alerte par recharge manquante | warning / error |
 
 Les alertes sont affichées sur la carte du jour (badge) et dans un panneau récapitulatif du voyage.
 
@@ -482,3 +483,6 @@ Mesure US2 (2 novembre 2026, sur un voyage réel) : survol du profil → point s
 29. Départ et arrivée : champs du voyage (`origin`, `destination`), avec « Arrivée identique au départ » coché par défaut. Le départ s'affiche au J1 et n'est pas une étape de séjour. Un `departurePlaceId` sur la première étape reste possible et prime sur `origin`.
 30. Réseaux de recharge favoris : IONITY, Izivia, Mobilize, Sowatt, Le Plein et Electra, tirés de la liste Google Maps de David. Electra, absent de la base IRVE, vient d'Open Charge Map (`OPENCHARGEMAP_API_KEY`). Plug Inn n'est ni dans IRVE ni dans Open Charge Map : ses bornes s'ajoutent par lien Google Maps. « Le Plein » ne correspond dans la base qu'à « Le Plein Tarnais » : à confirmer.
 31. Bornes favorites : étoile par borne, ou ajout par lien Google Maps (pour Plug Inn et Electra), conservées dans `settings.json`, donc communes à tous les voyages et affichées partout sur la carte en voiture électrique. Elles passent devant les réseaux favoris.
+32. Autonomie : le voyage porte `vehicle` (batterie, niveau au départ, consommation), et l'hébergement `chargesOvernight`. Hypothèses : consommation fixe, 22 kWh/100 km par défaut, sans dénivelé ni froid ; retour à 80 % à chaque borne du planning quelle que soit la pause ; réserve de 15 %. Faut-il tenir compte de la pause et de la puissance ? (Provisoire : non.)
+33. Bibliothèque de randos : `trips/.library/` (`library.json`, `gpx/`), routes `/api/library…`. Un voyage reçoit une copie de la fiche et du GPX, reliée par l'empreinte SHA-256 du fichier, plutôt qu'une référence : il reste autonome, et supprimer une rando de la bibliothèque ne le casse pas. Les modifications ne se propagent donc pas entre voyage et bibliothèque. Faut-il proposer une synchronisation ? (Provisoire : non.)
+34. Rythme réel : la comparaison porte sur toutes les sorties chronométrées, sans distinguer dénivelé, saison ou chien, et ajuste seulement `breakFactor`, à partir de 3 sorties et sur clic. Faut-il affiner vitesse et dénivelé séparément ? (Provisoire : non.)

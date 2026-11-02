@@ -170,7 +170,7 @@ test('créer un voyage, le retrouver après rechargement, le dupliquer et le sup
   await page.getByRole('button', { name: 'Crete Sud', exact: true }).first().click();
   await page.getByLabel('Politique chiens').click();
   await page.getByRole('option', { name: 'Chiens interdits' }).click();
-  await page.getByRole('button', { name: 'Enregistrer' }).click();
+  await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
   await expect(page.getByText('Chiens interdits : Crete Sud')).toBeVisible();
 
   await page.getByLabel('Sélectionner Chien à confirmer : Col du Festre').click();
@@ -434,4 +434,50 @@ test('créer un voyage, le retrouver après rechargement, le dupliquer et le sup
   await page.getByRole('alertdialog').getByRole('button', { name: 'Supprimer' }).click();
   await expect(copy).toBeHidden();
   await expect(page.getByRole('link', { name: 'Dévoluy & Champsaur 2027', exact: true })).toBeVisible();
+});
+
+test('retrouver une rando dans la bibliothèque, la réutiliser et noter une sortie', async ({
+  page,
+}) => {
+  const createTrip = async (name: string) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Nouveau voyage' }).click();
+    await page.getByLabel('Nom du voyage').fill(name);
+    await page.getByLabel('Début').fill('2027-08-01');
+    await page.getByLabel('Fin', { exact: true }).fill('2027-08-02');
+    await page.getByRole('button', { name: 'Créer le voyage' }).click();
+    await expect(page.getByLabel('Nom du voyage')).toHaveValue(name);
+  };
+
+  await createTrip('Bibliothèque Un');
+  await page.getByLabel('Importer des GPX').setInputFiles({
+    name: 'aiguille.gpx',
+    mimeType: 'application/gpx+xml',
+    buffer: Buffer.from(
+      `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>Aiguille verte</name><trkseg>
+<trkpt lat="45.10" lon="6.10"><ele>1400</ele></trkpt>
+<trkpt lat="45.12" lon="6.12"><ele>1700</ele></trkpt>
+</trkseg></trk></gpx>`,
+    ),
+  });
+  await page.getByRole('button', { name: 'Ajouter à la bibliothèque' }).click();
+  await expect(page.getByRole('button', { name: 'Aiguille verte', exact: true })).toBeVisible();
+
+  await page.getByRole('link', { name: 'Mes randos' }).click();
+  await expect(page.getByRole('heading', { name: 'Mes randos' })).toBeVisible();
+  await page.getByRole('button', { name: /Aiguille verte/ }).click();
+  await page.getByLabel('Date').fill('2026-07-14');
+  await page.getByLabel('Heures').fill('2');
+  await page.getByRole('button', { name: 'Enregistrer la sortie' }).click();
+  await expect(page.getByRole('button', { name: /Retirer la sortie/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Noter 4 sur 5' }).click();
+  await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await expect(page.getByText('Faite 1 fois')).toBeVisible();
+
+  await createTrip('Bibliothèque Deux');
+  await page.getByRole('button', { name: 'Depuis ma bibliothèque' }).click();
+  await page.getByLabel('Aiguille verte').check();
+  await page.getByRole('button', { name: 'Ajouter au voyage' }).click();
+  await page.getByRole('button', { name: 'Aiguille verte', exact: true }).click();
+  await expect(page.getByRole('button', { name: /Retirer la sortie/ })).toBeVisible();
 });

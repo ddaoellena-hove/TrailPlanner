@@ -20,6 +20,9 @@ export function AppHeader() {
           TrailPlanner
         </Link>
         <div className="flex items-center gap-1">
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/randos">Mes randos</Link>
+          </Button>
           <Button
             variant="ghost"
             size="icon"

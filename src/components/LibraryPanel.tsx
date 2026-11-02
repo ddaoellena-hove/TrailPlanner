@@ -1,5 +1,5 @@
 import { useDraggable } from '@dnd-kit/core';
-import { CalendarPlus, Dog, GripVertical, Plus, Trash2, Upload } from 'lucide-react';
+import { CalendarPlus, Dog, GripVertical, Library, Plus, Trash2, Upload } from 'lucide-react';
 import { type DragEvent, useState } from 'react';
 import { ChargingList } from '@/components/ChargingList';
 import { FavoriteStations } from '@/components/FavoriteStations';
@@ -180,6 +180,7 @@ function LibraryPlace({
 export function LibraryPanel({
   trip,
   onImport,
+  onPickFromLibrary,
   onOpenHike,
   onPlanHike,
   onPlanPlace,
@@ -195,6 +196,7 @@ export function LibraryPanel({
 }: {
   trip: Trip;
   onImport: (files: File[]) => void;
+  onPickFromLibrary: () => void;
   onOpenHike: (hike: Hike) => void;
   onPlanHike: (hikeId: string, dayIndex: number) => void;
   onPlanPlace: (placeId: string, dayIndex: number) => void;
@@ -258,6 +260,10 @@ export function LibraryPanel({
                 }}
               />
             </label>
+            <Button variant="outline" size="sm" className="w-fit" onClick={onPickFromLibrary}>
+              <Library aria-hidden />
+              Depuis ma bibliothèque
+            </Button>
             {trip.hikes.length > 0 && (
               <ul className="grid gap-3">
                 {trip.hikes.map((hike) => (

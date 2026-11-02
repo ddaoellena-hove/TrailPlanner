@@ -50,15 +50,16 @@ L'e2e écrit dans `.e2e-trips/` et neutralise `NOTION_TOKEN`, `ORS_API_KEY`, `OP
 
 - **Voyages :** création, duplication, corbeille dans `trips/.trash`. Nom, dates, chien, voiture électrique, départ et arrivée se modifient directement dans la page.
 - **Randos :** import de plusieurs GPX, fiche complète, remplacement du tracé sans perdre le planning. Le GPX original n'est jamais modifié.
+- **Mes randos :** bibliothèque commune aux voyages, alimentée par les imports : recherche, filtres, carte, notes, sorties réalisées, comparaison du prévu au réel et ajustement du rythme en un clic. Une rando s'ajoute à un voyage par copie.
 - **Planning :** étapes glissées dans un jour ou entre jours, trajets calculés dans la timeline, nuits, replis, notes, totaux et charge par jour. Annuler/rétablir sur 50 niveaux, `Ctrl/Cmd+S`.
 - **Étapes :** avec trail, ou de séjour avec autocomplétion d'adresse. Chacune a un départ, par défaut le séjour précédent, et un séjour avec lien.
 - **Carte :** fond Plan IGN, photos aériennes ou OpenStreetMap, atténuable, couches de terrain à superposer (relief, pentes, courbes, eau, routes, traces hivernales), éléments du voyage masquables, tracés colorés par jour, filtre par jour, trajet du trail à l'hôtel en violet, profil altimétrique synchronisé, ajout d'un lieu au clic droit.
 - **Lieux :** séjour, recharge, ravitaillement, parking, point d'intérêt. Ajout par adresse, par clic sur la carte ou par lien Google Maps.
-- **Voiture électrique :** bornes le long des trajets et autour des étapes, réseaux favoris mis en avant, bornes favorites communes à tous les voyages, insérées dans le planning avec leur pause.
+- **Voiture électrique :** bornes le long des trajets et autour des étapes, réseaux favoris mis en avant, bornes favorites communes à tous les voyages, insérées dans le planning avec leur pause, lien vers leurs avis Google Maps pour juger de leur état. Avec la batterie, le niveau au départ et la consommation, le planning estime le niveau trajet par trajet.
 - **Lumière et météo :** lever et coucher du soleil, heure de départ par rando, prévisions à 16 jours.
 - **Points utiles :** eau, refuges, campings et parkings autour des randos.
 - **Préparation :** budget par poste et checklist adaptée au voyage.
-- **Alertes A1 à A9 :** panneau filtrable, badges par jour, correction en un clic des traversées, politique chiens modifiable en lot.
+- **Alertes A1 à A10 :** panneau filtrable, badges par jour, correction en un clic des traversées, politique chiens modifiable en lot.
 - **Assistant IA (optionnel) :** discussion sur le voyage, qui simule et propose des changements avec leur effet avant/après. Rien ne s'applique sans clic.
 - **Export Notion :** projet créé ou lié, sous-page carnet remplacée à chaque export, aperçu avant envoi.
 
@@ -79,6 +80,7 @@ trips/      données utilisateur
 | Stockage | `server/trip-store.ts`, `server/settings-store.ts` |
 | Routes | `server/app.ts` |
 | Trajets | `shared/itinerary.ts`, `server/routing.ts` |
+| Bibliothèque | `shared/library.ts`, `server/library-store.ts`, `src/pages/LibraryPage.tsx` |
 | Horaires et soleil | `shared/schedule.ts`, `shared/sun.ts`, `shared/totals.ts` |
 | Alertes | `shared/alerts.ts` |
 | Carnet et export | `shared/carnet.ts`, `server/notion.ts` |
@@ -110,6 +112,10 @@ Si le routage échoue, le trajet est estimé en ligne droite (× 1,3 à 70 km/h)
 - **Nuit d'un jour :** le sélecteur s'il est rempli, sinon le dernier séjour du jour.
 - **Aller-retour converti :** D+ et D− valent chacun D+ + D− de la traversée.
 - **Recharge :** les bornes se choisissent à la main, sans calcul selon l'autonomie.
+- **Bibliothèque :** un voyage garde sa copie de la fiche et du GPX, et l'empreinte SHA-256 du GPX fait le lien. Une rando renommée dans un voyage ne change donc pas la bibliothèque, et l'inverse non plus. Les voyages existants sont repris une seule fois, à la création de `trips/.library/` : une rando retirée ne revient que si on réimporte son GPX.
+- **Rythme réel :** la médiane durée réelle / durée estimée ajuste `breakFactor`, à partir de 3 sorties chronométrées et seulement sur clic.
+- **Batterie :** une estimation à consommation fixe, sans dénivelé ni froid. Une borne du planning remet à 80 % au moins, un hébergement coché à 100 % la nuit. A10 signale le premier trajet sous 15 %, sans choisir de borne.
+- **Avis des bornes :** un simple lien de recherche Google Maps, aucun avis n'est lu ni affiché dans l'app. Chargemap n'est pas proposé : sa carte ignore les coordonnées de l'adresse.
 - **Sauvegarde :** immédiate, ou à la sortie du champ pour le texte, à la place du délai d'une seconde de la SPEC.
 - **Notion :** le contenu d'une page projet n'est jamais modifié. Seule une sous-page du titre exact du carnet est vidée, et le lien Notion ne passe pas par les sauvegardes du front, pour survivre à un « annuler ».
 - **État front : TanStack Query.** L'état vit côté serveur ; la mise à jour est optimiste et les sauvegardes sont sérialisées.

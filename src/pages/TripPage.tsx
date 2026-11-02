@@ -23,6 +23,8 @@ import { ImportDialog } from '@/components/ImportDialog';
 import { ItineraryPanel } from '@/components/ItineraryPanel';
 import { LegRows } from '@/components/LegRows';
 import { LibraryPanel } from '@/components/LibraryPanel';
+import { LibraryPickerDialog } from '@/components/LibraryPickerDialog';
+import { OutingsSection } from '@/components/OutingsSection';
 import { PlaceDialog } from '@/components/PlaceDialog';
 import { PlaceIcon } from '@/components/PlaceIcon';
 import { PreparationPanel } from '@/components/PreparationPanel';
@@ -35,9 +37,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/api';
-import { useItinerary, useSettings, useWeather } from '@/lib/hooks';
+import {
+  useItinerary,
+  useLibrary,
+  useLibraryLinks,
+  useSettings,
+  useWeather,
+} from '@/lib/hooks';
 import { PLACE_TYPE_LABELS } from '@/lib/labels';
 import { type Alert, computeAlerts } from '../../shared/alerts';
+import { batteryPlan } from '../../shared/battery';
 import { type AssistantOp, applyOps } from '../../shared/assistant-ops';
 import { formatClock } from '../../shared/format';
 import { emptyHistory, record, redo, undo } from '../../shared/history';
@@ -86,10 +95,13 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
   const queryKey = ['trip', slug];
   const settings = useSettings();
   const itinerary = useItinerary(trip);
+  const library = useLibrary();
+  const libraryLinks = useLibraryLinks(trip);
   const weather = useWeather(trip);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [openHikeId, setOpenHikeId] = useState<string | null>(null);
   const [importing, setImporting] = useState<Hike[] | null>(null);
+  const [pickingFromLibrary, setPickingFromLibrary] = useState(false);
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const [profileTitle, setProfileTitle] = useState<string | null>(null);
   const [dayFilter, setDayFilter] = useState<number | null>(null);
@@ -201,6 +213,15 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
     if (imported.length > 0) setImporting(imported);
   };
 
+  const copyFromLibrary = async (ids: string[]) => {
+    try {
+      const copied = await Promise.all(ids.map((id) => api.copyLibraryHike(slug, id)));
+      await commit(addHikes(trip, copied));
+    } catch (error) {
+      toast.error(`Ajout impossible : ${error instanceof Error ? error.message : 'erreur'}`);
+    }
+  };
+
   const dropHike = (hikeId: string, dayIndex: number, position: number) => {
     const next = planHike(trip, dayIndex, hikeId);
     const stopId = next.days[dayIndex - 1]?.stops.at(-1)?.id ?? '';
@@ -280,6 +301,7 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
 
   const legs = useMemo(() => itinerary.data?.legs ?? [], [itinerary.data]);
   const alerts = useMemo(() => computeAlerts(trip, legs, settings), [trip, legs, settings]);
+  const battery = useMemo(() => batteryPlan(trip, legs), [trip, legs]);
 
   const findPlace = (id: string | undefined) => trip.places.find((place) => place.id === id);
   const findHike = (id: string) => trip.hikes.find((hike) => hike.id === id);
@@ -288,6 +310,9 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
   const stopName = (stop: Stop) =>
     (stop.kind === 'hike' ? findHike(stop.hikeId)?.name : undefined) ?? stopStay(stop)?.name;
   const openHike = openHikeId ? findHike(openHikeId) : undefined;
+  const openLibraryHike = library.data?.find(
+    ({ id }) => openHike && id === libraryLinks.data?.[openHike.id],
+  );
 
   const renderHikeTiming = (stop: Stop, hike: Hike) => {
     if (stop.kind !== 'hike') return null;
@@ -498,6 +523,7 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
           renderLegs={(stop, phase) => (
             <LegRows
               legs={legs.filter((leg) => leg.stopId === stop.id && leg.phase === phase)}
+              battery={battery}
             />
           )}
           renderDayAction={(day) =>
@@ -519,7 +545,7 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
             );
             return dayEnd.length > 0 ? (
               <ul>
-                <LegRows legs={dayEnd} />
+                <LegRows legs={dayEnd} battery={battery} />
               </ul>
             ) : null;
           }}
@@ -527,6 +553,7 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
             <LibraryPanel
               trip={trip}
               onImport={(files) => void importFiles(files)}
+              onPickFromLibrary={() => setPickingFromLibrary(true)}
               onOpenHike={(hike) => setOpenHikeId(hike.id)}
               onPlanHike={(hikeId, dayIndex) => save(planHike(trip, dayIndex, hikeId))}
               onPlanPlace={(placeId, dayIndex) => save(planPlace(trip, dayIndex, placeId))}
@@ -607,6 +634,7 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
         <PlaceDialog
           place={placeEditing.place}
           initialLocation={placeEditing.location}
+          electricVehicle={Boolean(trip.travelers.electricVehicle)}
           onClose={() => setPlaceEditing(null)}
           onSubmit={savePlace}
           onDelete={(placeId) => {
@@ -625,6 +653,13 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
           }}
         />
       )}
+      {pickingFromLibrary && (
+        <LibraryPickerDialog
+          trip={trip}
+          onClose={() => setPickingFromLibrary(false)}
+          onConfirm={copyFromLibrary}
+        />
+      )}
       {openHike && (
         <HikeSheet
           key={openHike.gpxFile}
@@ -639,6 +674,19 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
             setOpenHikeId(null);
             save(removeHike(trip, openHike.id));
           }}
+          outings={
+            openLibraryHike && (
+              <OutingsSection
+                hike={openLibraryHike}
+                defaultDate={
+                  trip.days.find(({ stops }) =>
+                    stops.some((stop) => stop.kind === 'hike' && stop.hikeId === openHike.id),
+                  )?.date ?? trip.startDate
+                }
+                tripSlug={slug}
+              />
+            )
+          }
         />
       )}
     </div>

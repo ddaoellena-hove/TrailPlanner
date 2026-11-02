@@ -73,24 +73,25 @@ export function estimateDurationMin(
 }
 
 /** Recalcule les durées de toutes les randos pour un nouveau rythme (SPEC §5.2). */
-export function withPace(trip: Trip, pace: Settings['pace']): Trip {
-  return {
-    ...trip,
-    hikes: trip.hikes.map((hike) => ({
-      ...hike,
-      stats: {
-        ...hike.stats,
-        estimatedDurationMin: Math.round(
-          estimateDurationMin(
-            hike.stats.distanceKm,
-            hike.stats.elevationGainM ?? 0,
-            hike.stats.elevationLossM ?? 0,
-            pace,
-          ),
+export function hikesWithPace<T extends Hike>(hikes: T[], pace: Settings['pace']): T[] {
+  return hikes.map((hike) => ({
+    ...hike,
+    stats: {
+      ...hike.stats,
+      estimatedDurationMin: Math.round(
+        estimateDurationMin(
+          hike.stats.distanceKm,
+          hike.stats.elevationGainM ?? 0,
+          hike.stats.elevationLossM ?? 0,
+          pace,
         ),
-      },
-    })),
-  };
+      ),
+    },
+  }));
+}
+
+export function withPace(trip: Trip, pace: Settings['pace']): Trip {
+  return { ...trip, hikes: hikesWithPace(trip.hikes, pace) };
 }
 
 function retracesItself(points: TrackPoint[]): boolean {

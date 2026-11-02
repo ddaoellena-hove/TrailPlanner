@@ -1,11 +1,11 @@
-import { Plus, Star } from 'lucide-react';
+import { MessageSquareText, Plus, Star } from 'lucide-react';
 import { LabeledSelect } from '@/components/HikeSelects';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useRankedStations, useSaveSettings, useSettings } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
-import { toggleFavoriteStation } from '../../shared/charging-networks';
+import { stationReviewsUrl, toggleFavoriteStation } from '../../shared/charging-networks';
 import { formatStation } from '@/lib/stations';
 import type { FavoriteStation, Trip } from '../../shared/schema';
 
@@ -98,6 +98,17 @@ export function ChargingList({
               <p className="text-xs text-muted-foreground">{formatStation(station)}</p>
             </div>
             <span className="flex shrink-0 gap-1">
+              <Button asChild variant="ghost" size="icon" className="size-8">
+                <a
+                  href={stationReviewsUrl(station)}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`Avis Google Maps de ${station.name}`}
+                  title="Avis Google Maps"
+                >
+                  <MessageSquareText aria-hidden />
+                </a>
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"

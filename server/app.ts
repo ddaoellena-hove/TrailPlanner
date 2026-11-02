@@ -5,6 +5,8 @@ import { z } from 'zod';
 import {
   DEFAULT_SETTINGS,
   type Health,
+  LibraryHikeFieldsSchema,
+  NewOutingSchema,
   NewTripSchema,
   NotionExportRequestSchema,
   SettingsSchema,
@@ -12,6 +14,7 @@ import {
   TripSchema,
 } from '../shared/schema';
 import { computeAlerts } from '../shared/alerts';
+import { LibraryHikeNotFoundError, LibraryStore } from './library-store';
 import { describeTrip } from '../shared/assistant-context';
 import { buildCarnet, carnetOutcome, carnetToMarkdown } from '../shared/carnet';
 import { plannedStops } from '../shared/itinerary';
@@ -58,6 +61,7 @@ export function createApp({
   assistants = [],
 }: AppOptions) {
   const store = new TripStore(tripsDir);
+  const library = new LibraryStore(tripsDir, store);
   const settings = new SettingsStore(settingsFile ?? path.join(tripsDir, 'settings.json'));
   const app = new Hono();
 
@@ -82,6 +86,9 @@ export function createApp({
 
   app.onError((error, c) => {
     if (error instanceof TripNotFoundError) return c.json({ error: 'Voyage introuvable' }, 404);
+    if (error instanceof LibraryHikeNotFoundError) {
+      return c.json({ error: 'Rando introuvable' }, 404);
+    }
     if (error instanceof GpxError) return c.json({ error: error.message }, 400);
     if (error instanceof MapLinkError) return c.json({ error: error.message }, 400);
     if (error instanceof NotionExportError) return c.json({ error: error.message }, 502);
@@ -101,6 +108,7 @@ export function createApp({
     // Réécrire tous les voyages n'a de sens que si le rythme change, pas pour une couche.
     if (JSON.stringify(pace) !== JSON.stringify(body.data.pace)) {
       await store.applyPace(body.data.pace);
+      await library.applyPace(body.data.pace);
     }
     return c.json(body.data);
   });
@@ -157,13 +165,54 @@ export function createApp({
       })
       .safeParse({ name: body.name, alltrailsUrl: body.alltrailsUrl });
     if (!fields.success) return c.json({ error: 'Lien AllTrails invalide' }, 400);
+    const bytes = Buffer.from(await file.arrayBuffer());
     const hike = await store.importGpx(c.req.param('slug'), {
       pace: (await settings.read()).pace,
-      bytes: Buffer.from(await file.arrayBuffer()),
+      bytes,
       fileName: file.name,
       ...fields.data,
     });
+    try {
+      await library.add(hike, bytes);
+    } catch (error) {
+      // La rando est bien dans le voyage : la bibliothèque ne doit pas faire échouer l'import.
+      console.warn('Rando non ajoutée à la bibliothèque :', error);
+    }
     return c.json(hike, 201);
+  });
+
+  app.get('/api/library', async (c) => c.json(await library.list()));
+
+  app.put('/api/library/:id', async (c) => {
+    const body = LibraryHikeFieldsSchema.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: 'Rando invalide' }, 400);
+    return c.json(await library.updateFields(c.req.param('id'), body.data));
+  });
+
+  app.delete('/api/library/:id', async (c) => {
+    await library.remove(c.req.param('id'));
+    return c.body(null, 204);
+  });
+
+  app.post('/api/library/:id/outings', async (c) => {
+    const body = NewOutingSchema.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: 'Sortie invalide' }, 400);
+    return c.json(await library.addOuting(c.req.param('id'), body.data), 201);
+  });
+
+  app.delete('/api/library/:id/outings/:outingId', async (c) =>
+    c.json(await library.removeOuting(c.req.param('id'), c.req.param('outingId'))),
+  );
+
+  app.get('/api/trips/:slug/library-links', async (c) =>
+    c.json(await library.links(c.req.param('slug'))),
+  );
+
+  app.post('/api/trips/:slug/library-hikes', async (c) => {
+    const body = z.object({ id: z.string() }).safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: 'Rando invalide' }, 400);
+    const { hike, bytes } = await library.read(body.data.id);
+    return c.json(await store.copyHike(c.req.param('slug'), hike, bytes), 201);
   });
 
   app.get('/api/trips/:slug/gpx/:hikeId', async (c) => {

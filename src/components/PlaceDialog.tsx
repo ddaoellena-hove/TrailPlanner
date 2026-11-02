@@ -3,6 +3,7 @@ import { AddressField } from '@/components/AddressField';
 import { LabeledSelect } from '@/components/HikeSelects';
 import { MapLinkField } from '@/components/MapLinkField';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -27,12 +28,14 @@ const DOG_OPTIONS = {
 export function PlaceDialog({
   place,
   initialLocation,
+  electricVehicle,
   onClose,
   onSubmit,
   onDelete,
 }: {
   place?: Place;
   initialLocation?: LatLng;
+  electricVehicle: boolean;
   onClose: () => void;
   onSubmit: (values: Omit<Place, 'id'>) => Promise<void>;
   onDelete: (placeId: string) => void;
@@ -48,6 +51,7 @@ export function PlaceDialog({
   const [dogPolicy, setDogPolicy] = useState<keyof typeof DOG_OPTIONS>(
     place?.dogPolicy ?? 'unknown',
   );
+  const [chargesOvernight, setChargesOvernight] = useState(place?.chargesOvernight ?? false);
   const [notes, setNotes] = useState(place?.notes ?? '');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -71,6 +75,7 @@ export function PlaceDialog({
         price: isLodging && price !== '' ? Number(price) : undefined,
         bookingStatus: isLodging && bookingStatus !== 'none' ? bookingStatus : undefined,
         dogPolicy: isLodging ? dogPolicy : undefined,
+        chargesOvernight: isLodging && chargesOvernight ? true : undefined,
       });
       onClose();
     } catch (cause) {
@@ -168,6 +173,16 @@ export function PlaceDialog({
                 options={DOG_OPTIONS}
                 onChange={setDogPolicy}
               />
+              {electricVehicle && (
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="place-charges"
+                    checked={chargesOvernight}
+                    onCheckedChange={(checked) => setChargesOvernight(checked === true)}
+                  />
+                  <Label htmlFor="place-charges">Recharge à 100 % pendant la nuit</Label>
+                </div>
+              )}
             </>
           )}
 

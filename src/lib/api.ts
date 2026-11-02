@@ -16,6 +16,12 @@ import {
   MapLinkResultSchema,
   type Itinerary,
   ItinerarySchema,
+  type LibraryHike,
+  type LibraryHikeFields,
+  LibraryHikeSchema,
+  type LibraryLinks,
+  LibraryLinksSchema,
+  type NewOuting,
   type NewTrip,
   type Poi,
   PoiSchema,
@@ -91,6 +97,50 @@ export const api = {
     body.set('name', fields.name);
     body.set('alltrailsUrl', fields.alltrailsUrl);
     const response = await request(`/trips/${slug}/gpx`, { method: 'POST', body });
+    return HikeSchema.parse(await response.json());
+  },
+
+  async library(): Promise<LibraryHike[]> {
+    return z.array(LibraryHikeSchema).parse(await (await request('/library')).json());
+  },
+
+  async updateLibraryHike(id: string, fields: LibraryHikeFields): Promise<LibraryHike> {
+    const response = await request(`/library/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(fields),
+    });
+    return LibraryHikeSchema.parse(await response.json());
+  },
+
+  async deleteLibraryHike(id: string): Promise<void> {
+    await request(`/library/${id}`, { method: 'DELETE' });
+  },
+
+  async addOuting(id: string, outing: NewOuting): Promise<LibraryHike> {
+    const response = await request(`/library/${id}/outings`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(outing),
+    });
+    return LibraryHikeSchema.parse(await response.json());
+  },
+
+  async deleteOuting(id: string, outingId: string): Promise<LibraryHike> {
+    const response = await request(`/library/${id}/outings/${outingId}`, { method: 'DELETE' });
+    return LibraryHikeSchema.parse(await response.json());
+  },
+
+  async libraryLinks(slug: string): Promise<LibraryLinks> {
+    return LibraryLinksSchema.parse(await (await request(`/trips/${slug}/library-links`)).json());
+  },
+
+  async copyLibraryHike(slug: string, id: string): Promise<Hike> {
+    const response = await request(`/trips/${slug}/library-hikes`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
     return HikeSchema.parse(await response.json());
   },
 

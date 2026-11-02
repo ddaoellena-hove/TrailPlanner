@@ -33,6 +33,18 @@ export function useItinerary(trip: Trip) {
   });
 }
 
+export function useLibrary() {
+  return useQuery({ queryKey: ['library'], queryFn: api.library });
+}
+
+/** Lien entre les randos d'un voyage et la bibliothèque, qui dépend de leurs seuls fichiers. */
+export function useLibraryLinks(trip: Trip) {
+  return useQuery({
+    queryKey: ['library-links', trip.slug, trip.hikes.map(({ gpxFile }) => gpxFile).join()],
+    queryFn: () => api.libraryLinks(trip.slug),
+  });
+}
+
 export function useSettings() {
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
   return settings.data ?? DEFAULT_SETTINGS;

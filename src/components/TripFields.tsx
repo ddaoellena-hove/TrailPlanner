@@ -15,6 +15,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { VehicleFields } from '@/components/VehicleFields';
 import { formatDayCount } from '../../shared/format';
 import type { Place, Trip } from '../../shared/schema';
 import {
@@ -199,6 +200,10 @@ export function TripFields({ trip, onSave }: { trip: Trip; onSave: (trip: Trip) 
         <p role="alert" className="text-sm text-destructive">
           {error}
         </p>
+      )}
+
+      {trip.travelers.electricVehicle && (
+        <VehicleFields key={JSON.stringify(trip.vehicle)} trip={trip} onSave={onSave} />
       )}
 
       <div className="grid gap-2">

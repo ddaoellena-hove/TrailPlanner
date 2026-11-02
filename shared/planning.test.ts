@@ -5,6 +5,7 @@ import { corridorBoxes, MAX_BOXES } from './charging';
 import {
   rankStations,
   stationFromLink,
+  stationReviewsUrl,
   stationNetwork,
   toggleFavoriteStation,
 } from './charging-networks';
@@ -469,5 +470,31 @@ describe('historique', () => {
     for (let i = 0; i < HISTORY_LIMIT + 10; i++) history = record(history, i);
     expect(history.past).toHaveLength(HISTORY_LIMIT);
     expect(history.past[0]).toBe(10);
+  });
+});
+
+describe('stationReviewsUrl', () => {
+  const query = (url: string) => new URL(url).searchParams.get('query');
+
+  it('cherche par opérateur et adresse, plus fiables que les noms IRVE', () => {
+    const url = stationReviewsUrl({
+      name: 'ABB 400 RENAULT A',
+      operator: 'SOWATT SOLUTIONS',
+      address: "30 Route du Puy 38520 Le Bourg-d'Oisans",
+    });
+    expect(url).toMatch(/^https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=/);
+    expect(query(url)).toBe(
+      "borne de recharge SOWATT SOLUTIONS 30 Route du Puy 38520 Le Bourg-d'Oisans",
+    );
+  });
+
+  it('se rabat sur le nom sans adresse', () => {
+    const url = stationReviewsUrl({ name: 'Plug Inn Gap', operator: '', address: '' });
+    expect(query(url)).toBe('borne de recharge Plug Inn Gap');
+  });
+
+  it('garde le lien collé par l’utilisateur', () => {
+    const url = 'https://maps.app.goo.gl/abc';
+    expect(stationReviewsUrl({ name: 'Borne', operator: '', address: '', url })).toBe(url);
   });
 });

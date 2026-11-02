@@ -39,6 +39,7 @@ const STATUS_LABELS: Record<AlertCode, string> = {
   A7: 'Trajet estimé',
   A8: 'Hébergement à réserver',
   A9: 'Fin après le coucher du soleil',
+  A10: 'Batterie à vérifier',
 };
 
 const BOOKING: Record<NonNullable<Place['bookingStatus']>, string> = {

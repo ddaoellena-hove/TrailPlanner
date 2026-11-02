@@ -25,6 +25,7 @@ export const PlaceSchema = z.object({
   price: z.number().nonnegative().optional(),
   bookingStatus: z.enum(['idea', 'to-book', 'booked', 'cancelled']).optional(),
   dogPolicy: z.enum(['allowed', 'forbidden', 'unknown']).optional(),
+  chargesOvernight: z.boolean().optional(),
   notes: z.string().optional(),
 });
 export type Place = z.infer<typeof PlaceSchema>;
@@ -65,6 +66,47 @@ export const HikeSchema = z.object({
   tags: z.array(z.string()).optional(),
 });
 export type Hike = z.infer<typeof HikeSchema>;
+
+export const OutingSchema = z.object({
+  id: z.uuid(),
+  date: IsoDateSchema,
+  durationMin: z.number().positive().optional(),
+  tripSlug: SlugSchema.optional(),
+  notes: z.string().optional(),
+});
+export type Outing = z.infer<typeof OutingSchema>;
+
+export const NewOutingSchema = OutingSchema.omit({ id: true });
+export type NewOuting = z.infer<typeof NewOutingSchema>;
+
+/** Rando commune aux voyages. L'empreinte du GPX la relie aux copies dans les voyages. */
+export const LibraryHikeSchema = HikeSchema.extend({
+  gpxHash: z.string().min(1),
+  rating: z.number().int().min(1).max(5).optional(),
+  outings: z.array(OutingSchema),
+  createdAt: IsoDateTimeSchema,
+});
+export type LibraryHike = z.infer<typeof LibraryHikeSchema>;
+
+export const LibrarySchema = z.object({
+  schemaVersion: z.literal(1),
+  hikes: z.array(LibraryHikeSchema),
+});
+export type Library = z.infer<typeof LibrarySchema>;
+
+/** Corps de PUT /api/library/:id : remplace ces champs, un champ absent est vidé. */
+export const LibraryHikeFieldsSchema = LibraryHikeSchema.pick({
+  name: true,
+  alltrailsUrl: true,
+  dogPolicy: true,
+  notes: true,
+  tags: true,
+  rating: true,
+});
+export type LibraryHikeFields = z.infer<typeof LibraryHikeFieldsSchema>;
+
+export const LibraryLinksSchema = z.record(z.string(), z.string());
+export type LibraryLinks = z.infer<typeof LibraryLinksSchema>;
 
 export const StopSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -115,6 +157,13 @@ export const ChecklistItemSchema = z.object({
 });
 export type ChecklistItem = z.infer<typeof ChecklistItemSchema>;
 
+export const VehicleSchema = z.object({
+  batteryKwh: z.number().positive(),
+  startPercent: z.number().min(0).max(100),
+  consumptionKwhPer100km: z.number().positive(),
+});
+export type Vehicle = z.infer<typeof VehicleSchema>;
+
 const endsAfterStart = (dates: { startDate: string; endDate: string }) =>
   dates.endDate >= dates.startDate;
 const endsAfterStartError = {
@@ -133,6 +182,7 @@ export const TripSchema = z
     origin: PlaceSchema.optional(),
     destination: PlaceSchema.optional(),
     travelers: z.object({ withDog: z.boolean(), electricVehicle: z.boolean().optional() }),
+    vehicle: VehicleSchema.optional(),
     hikes: z.array(HikeSchema),
     places: z.array(PlaceSchema),
     days: z.array(DaySchema),

@@ -5,14 +5,14 @@ import { cn } from '@/lib/utils';
 
 /** Une couleur par nature d'information, la même partout dans l'interface. */
 const TONES = {
-  distance: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-  ascent: 'bg-orange-500/10 text-orange-700 dark:text-orange-300',
-  duration: 'bg-violet-500/10 text-violet-700 dark:text-violet-300',
-  drive: 'bg-blue-500/10 text-blue-700 dark:text-blue-300',
-  sun: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
-  weather: 'bg-sky-500/10 text-sky-700 dark:text-sky-300',
-  end: 'bg-primary/10 text-primary',
-  warning: 'bg-destructive/10 text-destructive',
+  distance: 'bg-tone-distance/10 text-tone-distance',
+  ascent: 'bg-tone-ascent/10 text-tone-ascent',
+  duration: 'bg-tone-duration/10 text-tone-duration',
+  drive: 'bg-tone-drive/10 text-tone-drive',
+  sun: 'bg-tone-sun/10 text-tone-sun',
+  weather: 'bg-tone-weather/10 text-tone-weather',
+  end: 'bg-tone-end/10 text-tone-end',
+  warning: 'bg-tone-warning/10 text-tone-warning',
   neutral: 'bg-muted text-muted-foreground',
 } as const;
 

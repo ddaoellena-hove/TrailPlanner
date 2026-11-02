@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_SETTINGS,
   type Hike,
+  type LibraryHike,
   type NewTrip,
   type NotionPreview,
   type Settings,
@@ -63,6 +64,37 @@ describe('API voyages', () => {
     // Une nouvelle instance simule le redémarrage du serveur.
     app = createApp({ tripsDir: dir, health: () => ({ ors: 'missing', notion: 'missing', assistant: 'missing', assistantProviders: [] }) });
     expect(await (await request(`/api/trips/${created.slug}`)).json()).toEqual(created);
+  });
+
+  it('ajoute un GPX importé à la bibliothèque et le copie dans un autre voyage', async () => {
+    const first = await createTrip();
+    const second = await createTrip({ ...newTrip, name: 'Second' });
+    const body = new FormData();
+    const gpx = `<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>Col</name><trkseg>
+<trkpt lat="44.70" lon="5.90"><ele>1400</ele></trkpt>
+<trkpt lat="44.71" lon="5.91"><ele>1500</ele></trkpt>
+</trkseg></trk></gpx>`;
+    body.set('file', new File([gpx], 'col.gpx'));
+    const imported = await request(`/api/trips/${first.slug}/gpx`, { method: 'POST', body });
+    expect(imported.status).toBe(201);
+
+    const [entry] = (await (await request('/api/library')).json()) as LibraryHike[];
+    expect(entry?.name).toBe('Col');
+
+    const copied = await post(`/api/trips/${second.slug}/library-hikes`, { id: entry!.id });
+    expect(copied.status).toBe(201);
+    const hike = (await copied.json()) as Hike;
+    expect(hike).not.toHaveProperty('outings');
+    expect(await readFile(path.join(dir, second.slug, hike.gpxFile), 'utf8')).toBe(gpx);
+
+    const missing = await post(`/api/trips/${second.slug}/library-hikes`, { id: 'inconnue' });
+    expect(missing.status).toBe(404);
+  });
+
+  it('valide les sorties et refuse la bibliothèque depuis un autre site', async () => {
+    expect((await post('/api/library/x/outings', { date: 'hier' })).status).toBe(400);
+    const foreign = await request('/api/library', { headers: { host: 'evil.example' } });
+    expect(foreign.status).toBe(403);
   });
 
   it('écrit un trip.json indenté, sans fichier temporaire résiduel', async () => {
