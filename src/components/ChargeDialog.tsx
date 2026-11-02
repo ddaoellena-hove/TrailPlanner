@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useChargingStations } from '@/lib/hooks';
+import { useRankedStations } from '@/lib/hooks';
 import { formatStation, stationNotes } from '@/lib/stations';
 import { distanceKm } from '../../shared/charging';
 import type { ChargingStation, MapLinkResult, Place, Trip } from '../../shared/schema';
@@ -25,7 +25,15 @@ const LIST_LIMIT = 40;
 /** Ouverture depuis une étape (`slotKey`) ou depuis une borne (`station`). */
 export type ChargeTarget = { slotKey?: string; station?: ChargingStation };
 
-type Option = { key: string; label: string; toPlace: () => Place; km: number | null };
+type Option = {
+  key: string;
+  label: string;
+  toPlace: () => Place;
+  km: number | null;
+  favorite: boolean;
+  /** Déjà dans le voyage, puis réseau favori, puis le reste. */
+  rank: number;
+};
 
 function stationPlace(station: ChargingStation): Place {
   return {
@@ -35,6 +43,10 @@ function stationPlace(station: ChargingStation): Place {
     location: station.location,
     notes: stationNotes(station),
   };
+}
+
+function favoriteRank(favorite: boolean) {
+  return { favorite, rank: favorite ? 1 : 0 };
 }
 
 function nearestSlot(slots: StopSlot[], station: ChargingStation): StopSlot | undefined {
@@ -59,7 +71,7 @@ export function ChargeDialog({
   onClose: () => void;
   onConfirm: (place: Place, slot: StopSlot | null, durationMin: number | undefined) => void;
 }) {
-  const stations = useChargingStations(trip, minKw);
+  const stations = useRankedStations(trip, minKw);
   const slots = stopSlots(trip);
   const [slotKey, setSlotKey] = useState(
     target.slotKey ??
@@ -83,7 +95,7 @@ export function ChargeDialog({
   const knownNames = new Set(known.map(({ name }) => name));
   const candidates = [
     ...(target.station ? [target.station] : []),
-    ...(stations.data ?? []).filter(({ id }) => id !== target.station?.id),
+    ...stations.stations.filter(({ id }) => id !== target.station?.id),
   ].filter(({ name }) => !knownNames.has(name));
 
   const options: Option[] = [
@@ -92,15 +104,20 @@ export function ChargeDialog({
       label: place.name,
       toPlace: () => place,
       km: kmFrom(place.location),
+      favorite: false,
+      rank: 2,
     })),
     ...candidates.map((station) => ({
       key: `station:${station.id}`,
       label: `${station.name} · ${formatStation(station)}`,
       toPlace: () => stationPlace(station),
       km: kmFrom(station.location),
+      ...favoriteRank(stations.stations.some(({ id, favorite }) => id === station.id && favorite)),
     })),
   ]
-    .toSorted((a, b) => (a.km ?? 0) - (b.km ?? 0))
+    .toSorted(
+      (a, b) => b.rank - a.rank || (a.km ?? 0) - (b.km ?? 0),
+    )
     .slice(0, LIST_LIMIT);
 
   const linkedPlace = (): Place | null =>
@@ -122,9 +139,9 @@ export function ChargeDialog({
     [NO_SLOT]: 'Dans les lieux seulement',
   };
   const borneOptions: Record<string, string> = Object.fromEntries(
-    options.map(({ key, label, km }) => [
+    options.map(({ key, label, km, favorite }) => [
       key,
-      km === null ? label : `${Math.round(km)} km · ${label}`,
+      `${favorite ? '★ ' : ''}${km === null ? '' : `${Math.round(km)} km · `}${label}`,
     ]),
   );
 

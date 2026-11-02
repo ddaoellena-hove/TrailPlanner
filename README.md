@@ -53,7 +53,7 @@ L'e2e écrit dans `.e2e-trips/` et neutralise `NOTION_TOKEN`, `ORS_API_KEY`, `AN
 - **Étapes :** avec trail, ou de séjour avec autocomplétion d'adresse. Chacune a un départ, par défaut le séjour précédent, et un séjour avec lien.
 - **Carte :** fond Plan IGN, photos aériennes ou OpenStreetMap, atténuable, couches de terrain à superposer (relief, pentes, courbes, eau, routes, traces hivernales), éléments du voyage masquables, tracés colorés par jour, filtre par jour, trajet du trail à l'hôtel en violet, profil altimétrique synchronisé, ajout d'un lieu au clic droit.
 - **Lieux :** séjour, recharge, ravitaillement, parking, point d'intérêt. Ajout par adresse, par clic sur la carte ou par lien Google Maps.
-- **Voiture électrique :** bornes le long des trajets et autour des étapes, insérées dans le planning avec leur pause.
+- **Voiture électrique :** bornes le long des trajets et autour des étapes, réseaux favoris mis en avant, insérées dans le planning avec leur pause.
 - **Lumière et météo :** lever et coucher du soleil, heure de départ par rando, prévisions à 16 jours.
 - **Points utiles :** eau, refuges, campings et parkings autour des randos.
 - **Préparation :** budget par poste et checklist adaptée au voyage.

@@ -253,6 +253,21 @@ describe('findStations', () => {
     });
   });
 
+  it('reconnaît le réseau d’une station, y compris par son aménageur', async () => {
+    vi.stubGlobal(
+      'fetch',
+      respond([
+        row({ nom_enseigne: 'Autre', nom_operateur: 'Autre', nom_amenageur: 'Izivia Express' }),
+        row({ id_station_itinerance: 'FR2', nom_enseigne: 'Autre', nom_operateur: 'Autre' }),
+      ]),
+    );
+    const stations = await findStations([], [{ lat: 44.56, lng: 6.08 }], 0);
+    expect(stations.map(({ id, network }) => [id, network])).toEqual([
+      ['FR1', 'izivia'],
+      ['FR2', null],
+    ]);
+  });
+
   it('ramène en kW les puissances saisies en W et filtre après conversion', async () => {
     vi.stubGlobal(
       'fetch',

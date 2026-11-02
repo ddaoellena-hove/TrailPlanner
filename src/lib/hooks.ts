@@ -1,5 +1,12 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { DEFAULT_SETTINGS, type Poi, type Trip } from '../../shared/schema';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { DEFAULT_FAVORITE_NETWORKS, rankStations } from '../../shared/charging-networks';
+import { DEFAULT_SETTINGS, type Poi, type Settings, type Trip } from '../../shared/schema';
 import { api } from './api';
 
 export const POI_LABELS: Record<Poi['kind'], string> = {
@@ -63,4 +70,31 @@ export function usePois(trip: Trip, enabled: boolean) {
     staleTime: Infinity,
     retry: false,
   });
+}
+
+/** Enregistre un réglage léger : il s'applique tout de suite, sans attendre le serveur. */
+export function useSaveSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: api.saveSettings,
+    onMutate: (next: Settings) => {
+      queryClient.setQueryData(['settings'], next);
+    },
+    onError: (error) => {
+      void queryClient.invalidateQueries({ queryKey: ['settings'] });
+      toast.error(`Réglage non enregistré : ${error.message}`);
+    },
+  });
+}
+
+/** Bornes du voyage, réseaux favoris en tête. */
+export function useRankedStations(trip: Trip, minKw: number) {
+  const settings = useSettings();
+  const query = useChargingStations(trip, minKw);
+  const stations = rankStations(
+    query.data ?? [],
+    settings.favoriteNetworks ?? DEFAULT_FAVORITE_NETWORKS,
+    settings.favoriteNetworksOnly ?? false,
+  );
+  return { ...query, stations };
 }

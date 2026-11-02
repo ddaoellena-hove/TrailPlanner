@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { tripBudget } from './budget';
 import { corridorBoxes, MAX_BOXES } from './charging';
+import { rankStations, stationNetwork } from './charging-networks';
 import { checklistSuggestions } from './checklist';
 import { forecastAvailableFrom, formatWeather, isForecastable } from './weather';
 import { parseMapLink } from './map-link';
@@ -346,6 +347,50 @@ describe('météo', () => {
         windKmh: 38,
       }),
     ).toBe('Neige · -4 à 3 °C · 6 mm · vent 38 km/h');
+  });
+});
+
+describe('réseaux favoris', () => {
+  const station = (id: string, maxPowerKw: number, network: string | null) => ({
+    id,
+    name: id,
+    address: '',
+    operator: '',
+    network,
+    location: { lat: 45, lng: 6 },
+    maxPowerKw,
+    points: 2,
+    connectors: [],
+    hours: null,
+  });
+  const stations = [
+    station('rapide', 400, null),
+    station('izivia', 50, 'izivia'),
+    station('ionity', 350, 'ionity'),
+  ];
+
+  it('reconnaît les noms réels de la base', () => {
+    expect(stationNetwork(['IONITY GMBH', null])).toBe('ionity');
+    expect(stationNetwork([null, 'IZIVIA'])).toBe('izivia');
+    expect(stationNetwork(['Izivia Express'])).toBe('izivia');
+    expect(stationNetwork([null, 'Mobilize Power Solutions'])).toBe('mobilize');
+    expect(stationNetwork(['SOWATT SOLUTIONS'])).toBe('sowatt');
+    expect(stationNetwork(['Le Plein Tarnais'])).toBe('le-plein');
+    expect(stationNetwork(['TotalEnergies', null])).toBeNull();
+  });
+
+  it('met les favoris en tête, par puissance', () => {
+    const ranked = rankStations(stations, ['izivia', 'ionity'], false);
+    expect(ranked.map(({ id }) => id)).toEqual(['ionity', 'izivia', 'rapide']);
+    expect(ranked.map(({ favorite }) => favorite)).toEqual([true, true, false]);
+  });
+
+  it('filtre sur les seuls favoris', () => {
+    expect(rankStations(stations, ['izivia'], true).map(({ id }) => id)).toEqual(['izivia']);
+  });
+
+  it('ne marque rien sans favori', () => {
+    expect(rankStations(stations, [], false).some(({ favorite }) => favorite)).toBe(false);
   });
 });
 

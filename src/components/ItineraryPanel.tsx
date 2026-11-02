@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import {
   itineraryKey,
-  useChargingStations,
+  useRankedStations,
   useItinerary,
   usePois,
   useSettings,
@@ -51,7 +51,7 @@ export function ItineraryPanel({
   const queryClient = useQueryClient();
   const settings = useSettings();
   const itinerary = useItinerary(trip);
-  const stations = useChargingStations(trip, chargingMinKw);
+  const stations = useRankedStations(trip, chargingMinKw);
   const pois = usePois(trip, poiRequested);
   const [hoveredHikeId, setHoveredHikeId] = useState<string | null>(null);
   const [cursorIndex, setCursorIndex] = useState<number | null>(null);
@@ -142,7 +142,7 @@ export function ItineraryPanel({
           dayFilter={dayFilter}
           onAddPlaceAt={onAddPlaceAt}
           onOpenPlace={onOpenPlace}
-          stations={trip.travelers.electricVehicle ? (stations.data ?? []) : []}
+          stations={trip.travelers.electricVehicle ? stations.stations : []}
           onAddStation={onAddStation}
           pois={pois.data ?? []}
           onAddPoi={onAddPoi}

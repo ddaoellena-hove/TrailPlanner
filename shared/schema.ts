@@ -229,6 +229,8 @@ export const SettingsSchema = z.object({
   /** Coût par conversation au-delà duquel l'assistant prévient, en dollars. */
   assistantBudgetUsd: z.number().positive().optional(),
   assistantProvider: z.enum(['anthropic', 'openai']).optional(),
+  favoriteNetworks: z.array(z.string()).optional(),
+  favoriteNetworksOnly: z.boolean().optional(),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
@@ -237,6 +239,7 @@ export const ChargingStationSchema = z.object({
   name: z.string(),
   address: z.string(),
   operator: z.string(),
+  network: z.string().nullable().optional(),
   location: LatLngSchema,
   maxPowerKw: z.number().nonnegative(),
   points: z.number().int().nonnegative(),

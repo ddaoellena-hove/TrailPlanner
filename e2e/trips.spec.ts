@@ -226,11 +226,24 @@ test('créer un voyage, le retrouver après rechargement, le dupliquer et le sup
           name: 'Borne du col',
           address: '1 route du col, 05000 Gap',
           operator: 'Opérateur test',
+          network: 'ionity',
           location: { lat: 44.7, lng: 5.95 },
           maxPowerKw: 150,
           points: 8,
           connectors: ['CCS', 'Type 2'],
           hours: '24/7',
+        },
+        {
+          id: 'FRTEST2',
+          name: 'Borne autre',
+          address: '',
+          operator: 'Autre',
+          network: null,
+          location: { lat: 44.71, lng: 5.96 },
+          maxPowerKw: 300,
+          points: 4,
+          connectors: ['CCS'],
+          hours: null,
         },
       ],
     }),
@@ -238,6 +251,10 @@ test('créer un voyage, le retrouver après rechargement, le dupliquer et le sup
   await page.getByLabel('Voiture électrique').click();
   await expect(page.getByLabel('Voiture électrique')).toBeChecked();
   await page.getByRole('tab', { name: /Lieux/ }).click();
+  await expect(page.getByLabel('Réseau favori')).toHaveCount(1);
+  await page.getByLabel('Mes réseaux uniquement').click();
+  await expect(page.getByRole('button', { name: 'Ajouter Borne autre au voyage' })).toBeHidden();
+  await page.getByLabel('Mes réseaux uniquement').click();
   await page.getByRole('button', { name: 'Ajouter Borne du col au voyage' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Ajouter' }).click();
   await expect(page.getByRole('button', { name: 'Borne du col', exact: true })).toHaveCount(2);

@@ -16,6 +16,7 @@ import { dayColor, DRIVE_COLOR, TRAIL_TO_STAY_COLOR } from '@/lib/labels';
 import { BASE_LAYERS, type MapView, OVERLAYS, type TripLayerId } from '@/lib/map-layers';
 import { plannedStops } from '../../shared/itinerary';
 import { formatStation } from '@/lib/stations';
+import type { RankedStation } from '../../shared/charging-networks';
 import type {
   ChargingStation,
   Hike,
@@ -68,12 +69,14 @@ function driveLines(legs: ItineraryLeg[]): GeoJSON.FeatureCollection {
   };
 }
 
-function points(items: { id: string; location: LatLng }[]): GeoJSON.FeatureCollection {
+function points(
+  items: { id: string; location: LatLng; favorite?: boolean }[],
+): GeoJSON.FeatureCollection {
   return {
     type: 'FeatureCollection',
-    features: items.map(({ id, location }) => ({
+    features: items.map(({ id, location, favorite }) => ({
       type: 'Feature',
-      properties: { itemId: id },
+      properties: { itemId: id, favorite: favorite ?? false },
       geometry: { type: 'Point', coordinates: [location.lng, location.lat] },
     })),
   };
@@ -120,7 +123,7 @@ export function TripMap({
   onHikeHover: (hikeId: string | null, position: LatLng) => void;
   onAddPlaceAt: (location: LatLng) => void;
   onOpenPlace: (placeId: string) => void;
-  stations: ChargingStation[];
+  stations: RankedStation[];
   onAddStation: (station: ChargingStation) => void;
   pois: Poi[];
   onAddPoi: (poi: Poi) => void;
@@ -329,8 +332,8 @@ export function TripMap({
           type="circle"
           layout={shown('stations')}
           paint={{
-            'circle-color': '#16a34a',
-            'circle-radius': 5,
+            'circle-color': ['case', ['get', 'favorite'], '#ea580c', '#16a34a'],
+            'circle-radius': ['case', ['get', 'favorite'], 6.5, 4.5],
             'circle-stroke-color': '#ffffff',
             'circle-stroke-width': 1.5,
           }}

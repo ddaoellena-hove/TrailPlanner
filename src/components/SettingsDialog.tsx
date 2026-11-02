@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -21,6 +22,11 @@ import {
 import { LabeledSelect } from '@/components/HikeSelects';
 import { api } from '@/lib/api';
 import { ASSISTANT_LABELS } from '@/lib/labels';
+import {
+  CHARGING_NETWORKS,
+  DEFAULT_FAVORITE_NETWORKS,
+  NETWORKS_NOT_IN_IRVE,
+} from '../../shared/charging-networks';
 import { formatDuration } from '../../shared/format';
 import { estimateDurationMin } from '../../shared/gpx';
 import type { Health, Settings } from '../../shared/schema';
@@ -77,6 +83,8 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
     }
     save.mutate(parsed.data);
   };
+
+  const favorites = draft.favoriteNetworks ?? DEFAULT_FAVORITE_NETWORKS;
 
   const example = estimateDurationMin(10, 800, 800, draft.pace);
   const preview = Number.isFinite(example) ? formatDuration(Math.round(example / 5) * 5) : '–';
@@ -197,6 +205,36 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
               }
             />
           )}
+
+          <section className="grid gap-2">
+            <h3 className="text-sm font-medium">Réseaux de recharge favoris</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {CHARGING_NETWORKS.map(({ id, label }) => (
+                <div key={id} className="flex items-center gap-2">
+                  <Checkbox
+                    id={`network-${id}`}
+                    checked={favorites.includes(id)}
+                    onCheckedChange={(checked) =>
+                      setDraft({
+                        ...draft,
+                        favoriteNetworks:
+                          checked === true
+                            ? [...favorites, id]
+                            : favorites.filter((network) => network !== id),
+                      })
+                    }
+                  />
+                  <Label htmlFor={`network-${id}`} className="font-normal">
+                    {label}
+                  </Label>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {NETWORKS_NOT_IN_IRVE.join(' et ')} ne sont pas dans la base nationale : ajoutez leurs
+              bornes par lien Google Maps.
+            </p>
+          </section>
 
           <section className="grid gap-1.5">
             <Label htmlFor="assistant-budget">Prévenir au-delà de ($ par conversation)</Label>

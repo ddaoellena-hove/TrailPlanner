@@ -1,14 +1,12 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Layers } from 'lucide-react';
 import { useState } from 'react';
-import { toast } from 'sonner';
 import { LabeledSelect } from '@/components/HikeSelects';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
-import { api } from '@/lib/api';
+import { useSaveSettings } from '@/lib/hooks';
 import { BASE_LAYERS, mapViewOf, OVERLAYS, TRIP_LAYERS } from '@/lib/map-layers';
 import type { Settings } from '../../shared/schema';
 
@@ -43,20 +41,9 @@ function LayerSwitch({
 
 /** Personnalisation de la carte : s'applique tout de suite et reste d'un voyage à l'autre. */
 export function LayersMenu({ settings }: { settings: Settings }) {
-  const queryClient = useQueryClient();
   const view = mapViewOf(settings);
   const [opacity, setOpacity] = useState<number | null>(null);
-
-  const save = useMutation({
-    mutationFn: api.saveSettings,
-    onMutate: (next: Settings) => {
-      queryClient.setQueryData(['settings'], next);
-    },
-    onError: (error) => {
-      void queryClient.invalidateQueries({ queryKey: ['settings'] });
-      toast.error(`Réglage non enregistré : ${error.message}`);
-    },
-  });
+  const save = useSaveSettings();
 
   const update = (changes: Partial<Settings>) => save.mutate({ ...settings, ...changes });
   const shownOpacity = opacity ?? view.baseOpacity;

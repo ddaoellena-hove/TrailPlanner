@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { type Box, corridorBoxes } from '../shared/charging';
+import { stationNetwork } from '../shared/charging-networks';
 import type { ChargingStation, LatLng } from '../shared/schema';
 
 /** Le fichier national est republié sous un nouvel identifiant : on part toujours du jeu de données. */
@@ -16,6 +17,7 @@ const RowSchema = z.object({
   adresse_station: z.string().nullable(),
   nom_operateur: z.string().nullable(),
   nom_enseigne: z.string().nullable(),
+  nom_amenageur: z.string().nullable().optional(),
   consolidated_latitude: z.number(),
   consolidated_longitude: z.number(),
   consolidated_is_lon_lat_correct: z.boolean().nullable(),
@@ -90,6 +92,11 @@ function toStation(rows: Row[]): ChargingStation {
     name: first.nom_station || first.adresse_station || first.id_station_itinerance,
     address: first.adresse_station ?? '',
     operator: first.nom_enseigne || first.nom_operateur || '',
+    network: stationNetwork([
+      first.nom_enseigne,
+      first.nom_operateur,
+      first.nom_amenageur ?? null,
+    ]),
     location: { lat: first.consolidated_latitude, lng: first.consolidated_longitude },
     maxPowerKw: Math.max(...rows.map(powerKw)),
     points: Math.max(first.nbre_pdc ?? 0, rows.length),
