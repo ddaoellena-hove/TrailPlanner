@@ -4,7 +4,7 @@ import { type DragEvent, useState } from 'react';
 import { ChargingList } from '@/components/ChargingList';
 import { PlaceIcon } from '@/components/PlaceIcon';
 import { PoiList } from '@/components/PoiList';
-import { hikeSummary } from '@/components/StopDetails';
+import { HikeBadges } from '@/components/StopDetails';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -90,7 +90,9 @@ function LibraryHike({
           >
             {hike.name}
           </button>
-          <p className="text-sm text-muted-foreground tabular-nums">{hikeSummary(hike)}</p>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            <HikeBadges hike={hike} />
+          </div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {isUnplanned && <Badge variant="outline">Non planifiée</Badge>}
             {hike.stats.elevationGainM === null && <Badge variant="outline">Sans altitude</Badge>}

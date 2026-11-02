@@ -99,17 +99,19 @@ function DayCard({
     <Card
       ref={setNodeRef}
       id={`day-${day.index}`}
-      className={cn('scroll-mt-4', highlighted && 'border-primary')}
+      style={{ borderLeftColor: dayColor(day.index) }}
+      className={cn('scroll-mt-4 border-l-4', highlighted && 'ring-2 ring-primary')}
     >
       <CardHeader className="flex flex-row items-center justify-between gap-2">
         <CardTitle className="flex min-w-0 flex-wrap items-center gap-2 text-base">
-          <span
-            className="size-3 shrink-0 rounded-full"
-            style={{ backgroundColor: dayColor(day.index) }}
-            aria-hidden
-          />
-          <button type="button" className="first-letter:uppercase hover:underline" onClick={onSelect}>
-            J{day.index} · {formatDay(day.date)}
+          <button type="button" className="flex items-center gap-2 hover:underline" onClick={onSelect}>
+            <span
+              className="rounded-md px-1.5 py-0.5 text-xs font-bold text-white"
+              style={{ backgroundColor: dayColor(day.index) }}
+            >
+              J{day.index}
+            </span>
+            <span className="inline-block first-letter:uppercase">{formatDay(day.date)}</span>
           </button>
           {badges}
         </CardTitle>

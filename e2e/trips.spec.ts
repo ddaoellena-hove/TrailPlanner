@@ -294,7 +294,7 @@ test('créer un voyage, le retrouver après rechargement, le dupliquer et le sup
   await expect(page.getByText('1 sur', { exact: false })).toBeVisible();
 
   await expect(page.getByText(/Prévision disponible à partir du/).first()).toBeVisible();
-  await expect(page.getByText(/Lever \d\d:\d\d · coucher \d\d:\d\d/).first()).toBeVisible();
+  await expect(page.getByText(/Coucher \d\d:\d\d/).first()).toBeVisible();
 
   await page.route('**/api/trips/*/poi', (route) =>
     route.fulfill({

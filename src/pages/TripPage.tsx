@@ -26,7 +26,7 @@ import { LibraryPanel } from '@/components/LibraryPanel';
 import { PlaceDialog } from '@/components/PlaceDialog';
 import { PlaceIcon } from '@/components/PlaceIcon';
 import { PreparationPanel } from '@/components/PreparationPanel';
-import { hikeSummary, StopDetails } from '@/components/StopDetails';
+import { HikeBadges, StopDetails } from '@/components/StopDetails';
 import { StopDialog, type StopValues } from '@/components/StopDialog';
 import { TripFields } from '@/components/TripFields';
 import { TripStatsCard } from '@/components/TripStatsCard';
@@ -331,7 +331,7 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
           <StopDetails
             icon={<Footprints aria-hidden />}
             name={hike.name}
-            summary={hikeSummary(hike)}
+            summary={<HikeBadges hike={hike} />}
             directionsTo={hike.start}
             alltrailsUrl={hike.alltrailsUrl}
             departure={departure}

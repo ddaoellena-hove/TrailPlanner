@@ -1,5 +1,6 @@
-import { ExternalLink, MapPinned } from 'lucide-react';
+import { ExternalLink, Footprints, MapPinned, Mountain, Timer } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { StatBadge } from '@/components/StatBadge';
 import { BOOKING_LABELS } from '@/lib/labels';
 import { formatDuration, formatElevationGain, formatKm } from '../../shared/format';
 import type { Hike, LatLng, Place } from '../../shared/schema';
@@ -11,6 +12,22 @@ export function hikeSummary({ stats }: Hike): string {
     stats.elevationGainM === null ? 'D+ inconnu' : formatElevationGain(stats.elevationGainM),
     formatDuration(stats.estimatedDurationMin),
   ].join(' · ');
+}
+
+export function HikeBadges({ hike: { stats } }: { hike: Hike }) {
+  return (
+    <>
+      <StatBadge icon={Footprints} tone="distance">
+        {formatKm(stats.distanceKm)}
+      </StatBadge>
+      <StatBadge icon={Mountain} tone="ascent">
+        {stats.elevationGainM === null ? 'D+ inconnu' : formatElevationGain(stats.elevationGainM)}
+      </StatBadge>
+      <StatBadge icon={Timer} tone="duration">
+        {formatDuration(stats.estimatedDurationMin)}
+      </StatBadge>
+    </>
+  );
 }
 
 function ExternalAnchor({
@@ -49,7 +66,7 @@ export function StopDetails({
 }: {
   icon: ReactNode;
   name: string;
-  summary: string;
+  summary: ReactNode;
   directionsTo: LatLng;
   alltrailsUrl?: string;
   departure?: Place;
@@ -69,7 +86,7 @@ export function StopDetails({
         ) : (
           <p className="font-medium">{name}</p>
         )}
-        <p className="text-sm text-muted-foreground tabular-nums">{summary}</p>
+        <div className="mt-1 flex flex-wrap gap-1.5 text-sm text-muted-foreground">{summary}</div>
         {departure && <p className="text-sm text-muted-foreground">Départ : {departure.name}</p>}
         {stay && stay.name !== name && (
           <p className="text-sm text-muted-foreground">Séjour : {stay.name}</p>

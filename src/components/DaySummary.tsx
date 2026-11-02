@@ -1,5 +1,18 @@
-import { ChevronDown, CloudSun, Footprints, Plus, Sun, X } from 'lucide-react';
+import {
+  Car,
+  ChevronDown,
+  CloudSun,
+  Flag,
+  Footprints,
+  Mountain,
+  Plus,
+  Sunrise,
+  Sunset,
+  Timer,
+  X,
+} from 'lucide-react';
 import { LabeledSelect } from '@/components/HikeSelects';
+import { StatBadge } from '@/components/StatBadge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
@@ -90,6 +103,8 @@ export function DaySummary({
   const backups = trip.hikes.filter(({ id }) => day.backupHikeIds.includes(id));
   const candidates = trip.hikes.filter(({ id }) => !day.backupHikeIds.includes(id));
   const isLastDay = day.index === trip.days.at(-1)?.index;
+  const active = totals.activeMin > 0;
+  const endsAfterSunset = sun !== null && totals.estimatedEndMinutes > sun.sunsetMin;
   const night = nightOf(trip, day);
   const lodgings = trip.places.filter(({ type }) => type === 'lodging');
   const nightOptions: Record<string, string> = {
@@ -112,30 +127,71 @@ export function DaySummary({
       />
 
       {day.index === 1 && trip.origin && (
-        <p className="text-sm text-muted-foreground">Départ : {trip.origin.name}</p>
+        <p className="flex items-center gap-1.5 text-sm font-medium">
+          <Flag className="size-3.5 text-primary" aria-hidden />
+          Départ : {trip.origin.name}
+        </p>
       )}
       {isLastDay && trip.destination && (
-        <p className="text-sm text-muted-foreground">Arrivée : {trip.destination.name}</p>
-      )}
-
-      <p className="text-sm text-muted-foreground tabular-nums">
-        {formatKm(totals.hikingKm)} · {formatElevationGain(totals.elevationGainM)} ·{' '}
-        {formatDuration(totals.hikingMin)} de marche · {formatDuration(totals.drivingMin)} de route
-        · fin ≈ {totals.estimatedEndTime}
-      </p>
-
-      {sun && (
-        <p className="flex items-center gap-1.5 text-sm text-muted-foreground tabular-nums">
-          <Sun className="size-3.5" aria-hidden />
-          Lever {formatClock(sun.sunriseMin)} · coucher {formatClock(sun.sunsetMin)}
+        <p className="flex items-center gap-1.5 text-sm font-medium">
+          <Flag className="size-3.5 text-primary" aria-hidden />
+          Arrivée : {trip.destination.name}
         </p>
       )}
 
-      {weather && (
-        <p className="flex items-center gap-1.5 text-sm text-muted-foreground tabular-nums">
-          <CloudSun className="size-3.5" aria-hidden />
-          {weatherText(weather)}
-        </p>
+      {active ? (
+        <div className="flex flex-wrap gap-1.5">
+          {totals.hikingKm > 0 && (
+            <>
+              <StatBadge icon={Footprints} tone="distance">
+                {formatKm(totals.hikingKm)}
+              </StatBadge>
+              <StatBadge icon={Mountain} tone="ascent">
+                {formatElevationGain(totals.elevationGainM)}
+              </StatBadge>
+              <StatBadge icon={Timer} tone="duration">
+                {formatDuration(totals.hikingMin)} de marche
+              </StatBadge>
+            </>
+          )}
+          {totals.drivingMin > 0 && (
+            <StatBadge icon={Car} tone="drive">
+              {formatDuration(totals.drivingMin)} de route
+            </StatBadge>
+          )}
+          <StatBadge icon={Flag} tone={endsAfterSunset ? 'warning' : 'end'}>
+            Fin ≈ {totals.estimatedEndTime}
+          </StatBadge>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">Pas d'activité prévue ce jour.</p>
+      )}
+
+      {(sun || weather) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {sun && (
+            <>
+              <StatBadge icon={Sunrise} tone="sun">
+                Lever {formatClock(sun.sunriseMin)}
+              </StatBadge>
+              <StatBadge icon={Sunset} tone="sun">
+                Coucher {formatClock(sun.sunsetMin)}
+              </StatBadge>
+            </>
+          )}
+          {weather?.status === 'forecast' ? (
+            <StatBadge icon={CloudSun} tone="weather">
+              {weatherText(weather)}
+            </StatBadge>
+          ) : (
+            weather && (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <CloudSun className="size-3" aria-hidden />
+                {weatherText(weather)}
+              </span>
+            )
+          )}
+        </div>
       )}
 
       {!isLastDay && (
@@ -149,11 +205,11 @@ export function DaySummary({
               onChange({ nightPlaceId: value === AUTO_NIGHT ? undefined : value })
             }
           />
-          <p className="text-xs text-muted-foreground">
-            {night
-              ? `${night.name}${night.bookingStatus ? ` · ${BOOKING_LABELS[night.bookingStatus]}` : ''}`
-              : 'Aucune nuit définie'}
-          </p>
+          {(!night || night.bookingStatus) && (
+            <p className="text-xs text-muted-foreground">
+              {night?.bookingStatus ? BOOKING_LABELS[night.bookingStatus] : 'Aucune nuit définie'}
+            </p>
+          )}
         </div>
       )}
 
