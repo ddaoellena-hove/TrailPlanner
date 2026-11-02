@@ -92,7 +92,7 @@ export function useRankedStations(trip: Trip, minKw: number) {
   const settings = useSettings();
   const query = useChargingStations(trip, minKw);
   const stations = rankStations(
-    query.data ?? [],
+    query.data?.stations ?? [],
     settings.favoriteNetworks ?? DEFAULT_FAVORITE_NETWORKS,
     settings.favoriteNetworksOnly ?? false,
   );

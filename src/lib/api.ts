@@ -2,8 +2,8 @@ import { z } from 'zod';
 import type { Proposal } from '../../shared/plan-impact';
 import { ProposalSchema } from '../../shared/plan-impact';
 import {
-  type ChargingStation,
-  ChargingStationSchema,
+  type ChargingSearch,
+  ChargingSearchSchema,
   type DayWeather,
   DayWeatherSchema,
   type GeocodeResult,
@@ -130,9 +130,9 @@ export const api = {
     return z.array(NotionProjectSchema).parse(await response.json());
   },
 
-  async chargingStations(slug: string, minKw: number): Promise<ChargingStation[]> {
+  async chargingStations(slug: string, minKw: number): Promise<ChargingSearch> {
     const response = await request(`/trips/${slug}/charging?minKw=${minKw}`);
-    return z.array(ChargingStationSchema).parse(await response.json());
+    return ChargingSearchSchema.parse(await response.json());
   },
 
   async resolveMapLink(url: string): Promise<MapLinkResult> {

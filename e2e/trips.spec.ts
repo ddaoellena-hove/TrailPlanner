@@ -220,7 +220,9 @@ test('créer un voyage, le retrouver après rechargement, le dupliquer et le sup
   // Voiture électrique : bornes du trajet, ajoutées aux lieux du voyage.
   await page.route('**/api/trips/*/charging*', (route) =>
     route.fulfill({
-      json: [
+      json: {
+        incomplete: true,
+        stations: [
         {
           id: 'FRTEST1',
           name: 'Borne du col',
@@ -245,13 +247,15 @@ test('créer un voyage, le retrouver après rechargement, le dupliquer et le sup
           connectors: ['CCS'],
           hours: null,
         },
-      ],
+        ],
+      },
     }),
   );
   await page.getByLabel('Voiture électrique').click();
   await expect(page.getByLabel('Voiture électrique')).toBeChecked();
   await page.getByRole('tab', { name: /Lieux/ }).click();
   await expect(page.getByLabel('Réseau favori')).toHaveCount(1);
+  await expect(page.getByText("certaines zones n'ont pas répondu", { exact: false })).toBeVisible();
   await page.getByLabel('Mes réseaux uniquement').click();
   await expect(page.getByRole('button', { name: 'Ajouter Borne autre au voyage' })).toBeHidden();
   await page.getByLabel('Mes réseaux uniquement').click();

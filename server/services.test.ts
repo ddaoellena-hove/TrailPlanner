@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Place, Trip } from '../shared/schema';
 import { addPlaceStop } from '../shared/trip';
-import { findStations } from './charging';
+import { clearChargingCache, findStations } from './charging';
 import { findPois, overpassQuery, toPois } from './poi';
 import { tripWeather } from './weather';
 import { MapLinkError, resolveMapLink } from './map-link';
@@ -200,6 +200,8 @@ describe('checkKeys', () => {
 });
 
 describe('findStations', () => {
+  beforeEach(clearChargingCache);
+
   const row = (overrides: Record<string, unknown>) => ({
     id_station_itinerance: 'FR1',
     nom_station: 'Gap Centre',
@@ -242,7 +244,7 @@ describe('findStations', () => {
       ]),
     );
 
-    const stations = await findStations([], [{ lat: 44.56, lng: 6.08 }], 0);
+    const { stations } = await findStations([], [{ lat: 44.56, lng: 6.08 }], 0);
 
     expect(stations.map(({ id }) => id)).toEqual(['FR1', 'FR2']);
     expect(stations[0]).toMatchObject({
@@ -261,7 +263,7 @@ describe('findStations', () => {
         row({ id_station_itinerance: 'FR2', nom_enseigne: 'Autre', nom_operateur: 'Autre' }),
       ]),
     );
-    const stations = await findStations([], [{ lat: 44.56, lng: 6.08 }], 0);
+    const { stations } = await findStations([], [{ lat: 44.56, lng: 6.08 }], 0);
     expect(stations.map(({ id, network }) => [id, network])).toEqual([
       ['FR1', 'izivia'],
       ['FR2', null],
@@ -276,13 +278,13 @@ describe('findStations', () => {
         row({ id_station_itinerance: 'FR2', puissance_nominale: 22 }),
       ]),
     );
-    const stations = await findStations([], [{ lat: 44.56, lng: 6.08 }], 50);
+    const { stations } = await findStations([], [{ lat: 44.56, lng: 6.08 }], 50);
     expect(stations.map(({ id, maxPowerKw }) => [id, maxPowerKw])).toEqual([['FR1', 50]]);
   });
 
   it('écarte les coordonnées signalées incorrectes', async () => {
     vi.stubGlobal('fetch', respond([row({ consolidated_is_lon_lat_correct: false })]));
-    expect(await findStations([], [{ lat: 44.56, lng: 6.08 }], 0)).toEqual([]);
+    expect((await findStations([], [{ lat: 44.56, lng: 6.08 }], 0)).stations).toEqual([]);
   });
 
   it('interroge chaque zone une seule fois, et rien sans zone', async () => {
@@ -304,8 +306,78 @@ describe('findStations', () => {
       return json({ data: [row({})], meta: {} });
     });
     vi.stubGlobal('fetch', fetchMock);
-    const stations = await findStations([], [{ lat: 44.56, lng: 6.08 }], 0);
+    const { stations } = await findStations([], [{ lat: 44.56, lng: 6.08 }], 0);
     expect(stations.map(({ id }) => id)).toEqual(['FR1']);
+  });
+
+  const two = [
+    { lat: 44.56, lng: 6.08 },
+    { lat: 45.5, lng: 6.5 },
+  ];
+
+  it('garde les zones qui répondent quand une autre expire', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/datasets/')) return json(dataset);
+        if (url.includes('45.45')) throw new DOMException('expiré', 'TimeoutError');
+        return json({ data: [row({})], meta: {} });
+      }),
+    );
+    const result = await findStations([], two, 0);
+    expect(result.incomplete).toBe(true);
+    expect(result.stations.map(({ id }) => id)).toEqual(['FR1']);
+  });
+
+  it('réessaie une zone lente avant de l’abandonner', async () => {
+    let calls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/datasets/')) return json(dataset);
+        calls += 1;
+        if (calls === 1) throw new DOMException('expiré', 'TimeoutError');
+        return json({ data: [row({})], meta: {} });
+      }),
+    );
+    const result = await findStations([], [two[0]!], 0);
+    expect(result).toMatchObject({ incomplete: false });
+    expect(calls).toBe(2);
+  });
+
+  it('échoue seulement si aucune zone ne répond', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/datasets/')) return json(dataset);
+        throw new DOMException('expiré', 'TimeoutError');
+      }),
+    );
+    await expect(findStations([], two, 0)).rejects.toThrow(/aucune zone/);
+  });
+
+  it('ne rappelle pas le service pour une zone déjà connue', async () => {
+    const fetchMock = respond([row({})]);
+    vi.stubGlobal('fetch', fetchMock);
+    await findStations([], [two[0]!], 0);
+    const after = fetchMock.mock.calls.length;
+    await findStations([], [two[0]!], 0);
+    expect(fetchMock.mock.calls.length).toBe(after);
+  });
+
+  it('repart du catalogue si le fichier mémorisé disparaît', async () => {
+    let gone = false;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes('/datasets/')) return json(dataset);
+      if (gone && url.includes('/recent/')) return new Response('', { status: 410 });
+      return json({ data: [row({})], meta: {} });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await findStations([], [two[0]!], 0);
+    gone = true;
+    const result = await findStations([], [two[1]!], 0);
+    expect(result.stations).toHaveLength(1);
+    expect(fetchMock.mock.calls.some(([url]) => url.includes('/ancien/'))).toBe(true);
   });
 
   it('signale l’échec si aucun fichier ne répond', async () => {

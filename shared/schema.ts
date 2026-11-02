@@ -248,6 +248,13 @@ export const ChargingStationSchema = z.object({
 });
 export type ChargingStation = z.infer<typeof ChargingStationSchema>;
 
+/** `incomplete` : des zones n'ont pas répondu, la liste peut être partielle. */
+export const ChargingSearchSchema = z.object({
+  stations: z.array(ChargingStationSchema),
+  incomplete: z.boolean(),
+});
+export type ChargingSearch = z.infer<typeof ChargingSearchSchema>;
+
 export const DayWeatherSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('forecast'),

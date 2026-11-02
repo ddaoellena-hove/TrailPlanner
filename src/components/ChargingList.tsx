@@ -63,6 +63,12 @@ export function ChargingList({
           réseaux.
         </p>
       )}
+      {stations.data?.incomplete && (
+        <p className="text-xs text-muted-foreground">
+          Le service des bornes est lent : certaines zones n'ont pas répondu, la liste peut être
+          partielle.
+        </p>
+      )}
       {shown.length > 0 && (
         <p className="text-xs text-muted-foreground">
           {stations.stations.length} bornes sur la carte : orange pour vos réseaux, vert pour les

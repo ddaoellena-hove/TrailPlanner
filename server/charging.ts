@@ -1,14 +1,18 @@
 import { z } from 'zod';
 import { type Box, corridorBoxes } from '../shared/charging';
 import { stationNetwork } from '../shared/charging-networks';
-import type { ChargingStation, LatLng } from '../shared/schema';
+import type { ChargingSearch, ChargingStation, LatLng } from '../shared/schema';
 
 /** Le fichier national est republié sous un nouvel identifiant : on part toujours du jeu de données. */
 const DATASET_URL = 'https://www.data.gouv.fr/api/1/datasets/5448d3e0c751df01f85d0572/';
 const tabularUrl = (resourceId: string) =>
   `https://tabular-api.data.gouv.fr/api/resources/${resourceId}/data/`;
 const PAGE_SIZE = 100;
-const CONCURRENT_REQUESTS = 4;
+const CONCURRENT_REQUESTS = 2;
+const TIMEOUT_MS = 25_000;
+const ATTEMPTS = 2;
+/** La base est republiée chaque jour : une réponse reste valable quelques heures. */
+const CACHE_MS = 6 * 60 * 60 * 1000;
 const WATTS_THRESHOLD = 1000;
 
 const RowSchema = z.object({
@@ -72,7 +76,7 @@ async function fetchBox(resourceId: string, box: Box, minKw: number): Promise<Ro
   // Filtre grossier : le seuil exact s'applique après conversion en kW, dans findStations.
   if (minKw > 0) params.set('puissance_nominale__greater', String(minKw - 1));
   const response = await fetch(`${tabularUrl(resourceId)}?${params}`, {
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (response.status === 404 || response.status === 410) throw new ResourceGoneError();
   if (!response.ok) throw new Error(`IRVE : ${response.status}`);
@@ -109,22 +113,73 @@ function toStation(rows: Row[]): ChargingStation {
   };
 }
 
-async function fetchRows(resourceId: string, boxes: Box[], minKw: number): Promise<Row[]> {
-  const rows: Row[] = [];
-  for (let index = 0; index < boxes.length; index += CONCURRENT_REQUESTS) {
-    const batch = boxes.slice(index, index + CONCURRENT_REQUESTS);
-    rows.push(...(await Promise.all(batch.map((box) => fetchBox(resourceId, box, minKw)))).flat());
-  }
-  return rows;
+const boxCache = new Map<string, { at: number; rows: Row[] }>();
+let workingResource: string | null = null;
+
+export function clearChargingCache(): void {
+  boxCache.clear();
+  workingResource = null;
 }
 
-async function fetchFromLatestResource(boxes: Box[], minKw: number): Promise<Row[]> {
-  for (const resourceId of await candidateResources()) {
+/** Le service peut être lent : un second essai avant d'abandonner la zone. */
+async function fetchBoxWithRetry(resourceId: string, box: Box, minKw: number): Promise<Row[]> {
+  for (let attempt = 1; ; attempt++) {
     try {
-      return await fetchRows(resourceId, boxes, minKw);
+      return await fetchBox(resourceId, box, minKw);
+    } catch (error) {
+      if (error instanceof ResourceGoneError || attempt >= ATTEMPTS) throw error;
+    }
+  }
+}
+
+/** Une zone sans réponse n'annule pas les autres : on garde ce qui est arrivé. */
+async function fetchRows(resourceId: string, boxes: Box[], minKw: number) {
+  const rows: Row[] = [];
+  let failed = 0;
+  const missing = boxes.flatMap((box) => {
+    const cached = boxCache.get(`${JSON.stringify(box)}|${minKw}`);
+    if (cached && Date.now() - cached.at < CACHE_MS) {
+      rows.push(...cached.rows);
+      return [];
+    }
+    return [box];
+  });
+  for (let index = 0; index < missing.length; index += CONCURRENT_REQUESTS) {
+    const batch = missing.slice(index, index + CONCURRENT_REQUESTS);
+    const results = await Promise.allSettled(
+      batch.map((box) => fetchBoxWithRetry(resourceId, box, minKw)),
+    );
+    results.forEach((result, position) => {
+      if (result.status === 'fulfilled') {
+        const key = `${JSON.stringify(batch[position])}|${minKw}`;
+        boxCache.set(key, { at: Date.now(), rows: result.value });
+        rows.push(...result.value);
+      } else if (result.reason instanceof ResourceGoneError) {
+        throw result.reason;
+      } else {
+        console.warn('Zone de bornes sans réponse :', result.reason);
+        failed += 1;
+      }
+    });
+  }
+  return { rows, failed };
+}
+
+async function fetchFromLatestResource(boxes: Box[], minKw: number) {
+  const candidates = workingResource ? [workingResource] : await candidateResources();
+  for (const resourceId of candidates) {
+    try {
+      const result = await fetchRows(resourceId, boxes, minKw);
+      workingResource = resourceId;
+      return result;
     } catch (error) {
       if (!(error instanceof ResourceGoneError)) throw error;
     }
+  }
+  // Le fichier mémorisé a pu être remplacé : on repart du catalogue.
+  if (workingResource) {
+    workingResource = null;
+    return fetchFromLatestResource(boxes, minKw);
   }
   throw new Error('IRVE : aucun fichier disponible');
 }
@@ -134,10 +189,11 @@ export async function findStations(
   lines: number[][][],
   stops: LatLng[],
   minKw: number,
-): Promise<ChargingStation[]> {
+): Promise<ChargingSearch> {
   const boxes = corridorBoxes(lines, stops);
-  if (boxes.length === 0) return [];
-  const rows = await fetchFromLatestResource(boxes, minKw);
+  if (boxes.length === 0) return { stations: [], incomplete: false };
+  const { rows, failed } = await fetchFromLatestResource(boxes, minKw);
+  if (failed === boxes.length) throw new Error('IRVE : aucune zone n’a répondu');
 
   const byStation = new Map<string, Map<string, Row>>();
   for (const row of rows) {
@@ -147,8 +203,9 @@ export async function findStations(
     station.set(JSON.stringify(row), row);
     byStation.set(row.id_station_itinerance, station);
   }
-  return [...byStation.values()]
+  const stations: ChargingStation[] = [...byStation.values()]
     .map((station) => toStation([...station.values()]))
     .filter((station) => station.maxPowerKw >= minKw)
     .sort((a, b) => b.maxPowerKw - a.maxPowerKw);
+  return { stations, incomplete: failed > 0 };
 }
