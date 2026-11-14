@@ -81,6 +81,7 @@ trips/      données utilisateur
 | Routes | `server/app.ts` |
 | Trajets | `shared/itinerary.ts`, `server/routing.ts` |
 | Bibliothèque | `shared/library.ts`, `server/library-store.ts`, `src/pages/LibraryPage.tsx` |
+| Activités enregistrées | `shared/activity.ts`, `server/activity-store.ts`, `server/gpx.ts` (`parseRecordedGpx`) |
 | Horaires et soleil | `shared/schedule.ts`, `shared/sun.ts`, `shared/totals.ts` |
 | Alertes | `shared/alerts.ts` |
 | Carnet et export | `shared/carnet.ts`, `server/notion.ts` |
@@ -88,6 +89,26 @@ trips/      données utilisateur
 | Assistant | `shared/assistant-ops.ts`, `shared/plan-impact.ts`, `server/assistant.ts`, et par fournisseur `server/assistant-anthropic.ts`, `server/assistant-openai.ts` |
 
 Chaque voyage vit dans `trips/<slug>/` : `trip.json` lisible et diffable, `gpx/` pour les fichiers originaux, `cache/` pour les trajets et les points utiles. Les champs ajoutés après M0 sont optionnels, les anciens voyages restent lisibles sans migration.
+
+Les activités enregistrées (intégration AllTrails, en cours) vivent dans `trips/.activities/` : `activities.json` et `gpx/<id>.gpx`, copie octet pour octet du fichier importé.
+
+### Activités enregistrées : API, unités et règles
+
+| Méthode | Route | Rôle |
+| --- | --- | --- |
+| GET | `/api/activities` | liste |
+| POST | `/api/activities/preview` | multipart `file` : lit et calcule, n'écrit rien ; renvoie `{ draft, duplicate }` |
+| POST | `/api/activities` | multipart `file`, `title?`, `confirmProbableDuplicate?` : importe ; 409 sur doublon |
+| GET | `/api/activities/:id` | une activité |
+| GET | `/api/activities/:id/track` | trace complète en GeoJSON `MultiLineString`, un tracé par segment |
+
+- **Unités :** mètres et secondes, contrairement aux randos (km, minutes). Heures ISO 8601 recopiées telles qu'écrites dans le fichier, fuseau compris.
+- **Mesures, toutes calculées (`metricsOrigin`) :** distance haversine cumulée segment par segment, sans relier deux segments ; durée **écoulée** entre la première et la dernière heure, pauses comprises, jamais un temps en mouvement ; D+/D− avec le lissage des randos (moyenne sur 50 m, hystérésis de 5 m), par segment.
+- **Inconnu = null :** pas d'heure sur chaque point ou heures qui reculent → durée null ; une altitude manquante → dénivelé null. La date reste la première heure lisible. Rien n'est lu dans `<metadata><time>`, qui peut être la date d'export.
+- **Provenance :** `alltrails` seulement si l'attribut `creator` du GPX le dit, sinon `gpx`.
+- **Doublons :** même SHA-256 → refusé. Doublon probable (départ à 10 min près, distance à 5 % près, 80 % des points à moins de 50 m de l'autre trace, dans les deux sens) → refusé sauf confirmation. Sans heure d'un côté, la géométrie décide seule. Jamais de fusion.
+- **Sécurité :** GPX de 10 Mo au plus (aussi pour les randos d'un voyage), DTD et entités refusées, coordonnées hors bornes refusées.
+- **Atomicité :** le GPX est écrit, puis l'index ; si l'index échoue, le GPX est retiré.
 
 ## Services externes
 

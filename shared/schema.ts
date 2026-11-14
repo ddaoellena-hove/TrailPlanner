@@ -108,6 +108,79 @@ export type LibraryHikeFields = z.infer<typeof LibraryHikeFieldsSchema>;
 export const LibraryLinksSchema = z.record(z.string(), z.string());
 export type LibraryLinks = z.infer<typeof LibraryLinksSchema>;
 
+/** `calculated` : déduit de la trace par TrailPlanner ; `source` : lu tel quel dans le fichier. */
+export const MetricOriginSchema = z.enum(['calculated', 'source']);
+export type MetricOrigin = z.infer<typeof MetricOriginSchema>;
+
+/** `gpx` : fichier dont l'attribut `creator` n'indique pas AllTrails, sans autre provenance sûre. */
+export const ActivitySourceSchema = z.enum(['alltrails', 'gpx']);
+export type ActivitySource = z.infer<typeof ActivitySourceSchema>;
+
+/**
+ * Sortie enregistrée (trace GPS horodatée), distincte d'une rando prévue de la bibliothèque.
+ * Unités : mètres, secondes. Une valeur inconnue vaut null, jamais une estimation.
+ */
+export const ActivityDraftSchema = z.object({
+  title: z.string().min(1),
+  source: ActivitySourceSchema,
+  /** Identifiant chez la source ; les GPX AllTrails n'en portent pas. */
+  sourceId: z.string().nullable(),
+  /** Première heure de la trace, telle qu'écrite dans le fichier (précision et fuseau gardés). */
+  activityDate: z.string().nullable(),
+  /** Dernière heure de la trace, telle qu'écrite dans le fichier. */
+  endedAt: z.string().nullable(),
+  distanceMeters: z.number().nonnegative(),
+  /** Durée écoulée entre la première et la dernière heure, pauses comprises. */
+  durationSeconds: z.number().nonnegative().nullable(),
+  elevationGainMeters: z.number().nonnegative().nullable(),
+  elevationLossMeters: z.number().nonnegative().nullable(),
+  metricsOrigin: z.object({
+    distance: MetricOriginSchema,
+    duration: MetricOriginSchema.nullable(),
+    elevation: MetricOriginSchema.nullable(),
+  }),
+  pointCount: z.number().int().positive(),
+  segmentCount: z.number().int().positive(),
+  start: LatLngSchema,
+  end: LatLngSchema,
+  /** Profil échantillonné pour l'affichage ; la trace complète reste le GPX original. */
+  profile: HikeStatsSchema.shape.profile,
+  originalFileName: z.string(),
+  /** SHA-256 du fichier original. */
+  fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+});
+export type ActivityDraft = z.infer<typeof ActivityDraftSchema>;
+
+export const ActivitySchema = ActivityDraftSchema.extend({
+  id: z.uuid(),
+  /** Chemin relatif dans `.activities/`, copie octet pour octet, jamais modifiée. */
+  originalFile: z.string().min(1),
+  /** Rando prévue de la bibliothèque (`LibraryHike.id`), liée à la main. */
+  linkedRouteId: z.uuid().nullable(),
+  importedAt: IsoDateTimeSchema,
+  notes: z.string().optional(),
+});
+export type Activity = z.infer<typeof ActivitySchema>;
+
+export const ActivityStoreSchema = z.object({
+  schemaVersion: z.literal(1),
+  activities: z.array(ActivitySchema),
+});
+export type ActivityStoreFile = z.infer<typeof ActivityStoreSchema>;
+
+export const DuplicateCheckSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('none') }),
+  z.object({ status: z.literal('exact'), activityId: z.uuid() }),
+  z.object({ status: z.literal('probable'), activityId: z.uuid() }),
+]);
+export type DuplicateCheck = z.infer<typeof DuplicateCheckSchema>;
+
+export const ActivityPreviewSchema = z.object({
+  draft: ActivityDraftSchema,
+  duplicate: DuplicateCheckSchema,
+});
+export type ActivityPreview = z.infer<typeof ActivityPreviewSchema>;
+
 export const StopSchema = z.discriminatedUnion('kind', [
   z.object({
     id: z.uuid(),

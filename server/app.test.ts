@@ -2,7 +2,10 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { northboundPoints, recordedGpx } from '../shared/recorded-gpx.fixture';
 import {
+  type Activity,
+  type ActivityPreview,
   DEFAULT_SETTINGS,
   type Hike,
   type LibraryHike,
@@ -412,6 +415,81 @@ describe('API voyages', () => {
       notion: 'missing',
       assistant: 'missing',
       assistantProviders: [],
+    });
+  });
+  describe('activités enregistrées', () => {
+    const recording = recordedGpx([northboundPoints(20), northboundPoints(5, { lat: 45.1 })]);
+    const sameOuting = recordedGpx([
+      northboundPoints(20, { start: '2026-07-01T06:01:00Z', lng: 6.0002 }),
+      northboundPoints(5, { lat: 45.1, start: '2026-07-01T06:01:00Z', lng: 6.0002 }),
+    ]);
+
+    const upload = (route: string, content: string, fields: Record<string, string> = {}) => {
+      const form = new FormData();
+      form.set('file', new File([content], 'sortie.gpx'));
+      for (const [key, value] of Object.entries(fields)) form.set(key, value);
+      return request(route, { method: 'POST', body: form });
+    };
+
+    it('prévisualise sans enregistrer, puis importe sur confirmation', async () => {
+      const previewResponse = await upload('/api/activities/preview', recording);
+      expect(previewResponse.status).toBe(200);
+      const preview = (await previewResponse.json()) as ActivityPreview;
+      expect(preview.duplicate).toEqual({ status: 'none' });
+      expect(preview.draft).toMatchObject({ source: 'alltrails', segmentCount: 2 });
+      expect(await (await request('/api/activities')).json()).toEqual([]);
+
+      const created = await upload('/api/activities', recording, { title: 'Col' });
+      expect(created.status).toBe(201);
+      const activity = (await created.json()) as Activity;
+      expect(activity.title).toBe('Col');
+      expect(activity.distanceMeters).toBe(preview.draft.distanceMeters);
+      expect(await (await request('/api/activities')).json()).toEqual([activity]);
+      expect(await (await request(`/api/activities/${activity.id}`)).json()).toEqual(activity);
+      expect(
+        await readFile(path.join(dir, '.activities', activity.originalFile), 'utf8'),
+      ).toBe(recording);
+    });
+
+    it('renvoie la trace complète, segment par segment', async () => {
+      const activity = (await (await upload('/api/activities', recording)).json()) as Activity;
+      const feature = await (await request(`/api/activities/${activity.id}/track`)).json();
+      expect(feature.geometry.type).toBe('MultiLineString');
+      expect(feature.geometry.coordinates.map((line: unknown[]) => line.length)).toEqual([20, 5]);
+      expect((await request('/api/activities/inconnue/track')).status).toBe(404);
+      expect((await request('/api/activities/inconnue')).status).toBe(404);
+    });
+
+    it('bloque un doublon exact et exige un choix pour un doublon probable', async () => {
+      const first = (await (await upload('/api/activities', recording)).json()) as Activity;
+
+      const exact = await upload('/api/activities', recording);
+      expect(exact.status).toBe(409);
+      expect(await exact.json()).toMatchObject({
+        duplicate: { status: 'exact', activityId: first.id },
+      });
+
+      const probable = await upload('/api/activities', sameOuting);
+      expect(probable.status).toBe(409);
+      expect(await probable.json()).toMatchObject({ duplicate: { status: 'probable' } });
+      const confirmed = await upload('/api/activities', sameOuting, {
+        confirmProbableDuplicate: 'true',
+      });
+      expect(confirmed.status).toBe(201);
+      expect(await (await request('/api/activities')).json()).toHaveLength(2);
+    });
+
+    it('refuse un GPX invalide, une DTD et un fichier trop gros', async () => {
+      expect((await upload('/api/activities/preview', 'pas du xml')).status).toBe(400);
+      const withDoctype = recording.replace('<gpx ', '<!DOCTYPE gpx>\n<gpx ');
+      const refused = await upload('/api/activities', withDoctype);
+      expect(refused.status).toBe(400);
+      expect((await refused.json()).error).toContain('DOCTYPE');
+      const huge = recording.replace('</gpx>', `<!--${'x'.repeat(11 * 1024 * 1024)}--></gpx>`);
+      expect((await upload('/api/activities', huge)).status).toBe(413);
+      const { slug } = await createTrip();
+      expect((await uploadGpx(slug, huge)).status).toBe(413);
+      expect(await (await request('/api/activities')).json()).toEqual([]);
     });
   });
 });

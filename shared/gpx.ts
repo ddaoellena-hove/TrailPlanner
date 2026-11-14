@@ -13,11 +13,11 @@ const RETRACE_MAX_GAP_KM = 0.05;
 const RETRACE_MIN_SHARE = 0.8;
 const RETRACE_SAMPLES = 50;
 
-function distanceKm(a: LatLng, b: LatLng): number {
+export function distanceKm(a: LatLng, b: LatLng): number {
   return distance(point([a.lng, a.lat]), point([b.lng, b.lat]));
 }
 
-function cumulativeKm(points: TrackPoint[]): number[] {
+export function cumulativeKm(points: TrackPoint[]): number[] {
   const result = [0];
   for (let i = 1; i < points.length; i++) {
     result.push(result[i - 1]! + distanceKm(points[i - 1]!, points[i]!));
@@ -115,14 +115,14 @@ export function detectKind(points: TrackPoint[]): Hike['kind'] {
   return closed ? 'loop' : 'point-to-point';
 }
 
-function sampleIndexes(length: number): number[] {
+export function sampleIndexes(length: number): number[] {
   if (length <= MAX_PROFILE_POINTS) return Array.from({ length }, (_, i) => i);
   return Array.from({ length: MAX_PROFILE_POINTS }, (_, i) =>
     Math.round((i * (length - 1)) / (MAX_PROFILE_POINTS - 1)),
   );
 }
 
-function round(value: number, digits = 0): number {
+export function round(value: number, digits = 0): number {
   const factor = 10 ** digits;
   return Math.round(value * factor) / factor;
 }
