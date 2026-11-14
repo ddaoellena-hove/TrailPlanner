@@ -53,6 +53,10 @@ describe('dénivelé', () => {
     expect(elevationChange([100, 110, 120, 105])).toEqual({ gainM: 20, lossM: 15 });
   });
 
+  it('accepte un autre seuil, pour les traces enregistrées', () => {
+    expect(elevationChange([100, 103, 100], 2)).toEqual({ gainM: 3, lossM: 3 });
+  });
+
   it('lisse sur la distance', () => {
     expect(smoothAltitudes([100, 130, 100], [0, 0.02, 0.04])).toEqual([115, 110, 115]);
   });

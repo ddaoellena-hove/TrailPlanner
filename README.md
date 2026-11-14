@@ -70,7 +70,7 @@ src/        front React : pages/, components/ (ui/ = shadcn), lib/ (api, hooks, 
 server/     API Hono, seule couche qui touche le disque et les services externes
 shared/     schémas zod et fonctions de calcul pures, testées unitairement
 e2e/        parcours Playwright
-fixtures/   GPX de référence, vide tant que la validation d'US1 n'est pas faite
+fixtures/   GPX de référence : une sortie AllTrails réelle (recordings/) ; les itinéraires d'US1 restent à fournir
 trips/      données utilisateur
 ```
 
@@ -103,7 +103,7 @@ Les activités enregistrées (intégration AllTrails, en cours) vivent dans `tri
 | GET | `/api/activities/:id/track` | trace complète en GeoJSON `MultiLineString`, un tracé par segment |
 
 - **Unités :** mètres et secondes, contrairement aux randos (km, minutes). Heures ISO 8601 recopiées telles qu'écrites dans le fichier, fuseau compris.
-- **Mesures, toutes calculées (`metricsOrigin`) :** distance haversine cumulée segment par segment, sans relier deux segments ; durée **écoulée** entre la première et la dernière heure, pauses comprises, jamais un temps en mouvement ; D+/D− avec le lissage des randos (moyenne sur 50 m, hystérésis de 5 m), par segment.
+- **Mesures, toutes calculées (`metricsOrigin`) :** distance haversine cumulée segment par segment, sans relier deux segments ; durée **écoulée** entre la première et la dernière heure, pauses comprises, jamais un temps en mouvement ; D+/D− par segment, avec la moyenne sur 50 m des randos mais un seuil de 2 m au lieu de 5 m (`RECORDED_HYSTERESIS_M`), choisi sur une sortie AllTrails réelle.
 - **Inconnu = null :** pas d'heure sur chaque point ou heures qui reculent → durée null ; une altitude manquante → dénivelé null. La date reste la première heure lisible. Rien n'est lu dans `<metadata><time>`, qui peut être la date d'export.
 - **Provenance :** `alltrails` seulement si l'attribut `creator` du GPX le dit, sinon `gpx`.
 - **Doublons :** même SHA-256 → refusé. Doublon probable (départ à 10 min près, distance à 5 % près, 80 % des points à moins de 50 m de l'autre trace, dans les deux sens) → refusé sauf confirmation. Sans heure d'un côté, la géométrie décide seule. Jamais de fusion.

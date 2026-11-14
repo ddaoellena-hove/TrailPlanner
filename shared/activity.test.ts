@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import { computeHikeStats } from './gpx';
 import {
   activitySource,
   activityTitle,
   findDuplicate,
   isProbableDuplicate,
+  RECORDED_HYSTERESIS_M,
   type RecordedPoint,
   recordedMetrics,
   type RecordedTrack,
 } from './activity';
 import { northboundPoints } from './recorded-gpx.fixture';
-import type { Activity } from './schema';
+import { type Activity, DEFAULT_SETTINGS } from './schema';
 
 function track(segments: ReturnType<typeof northboundPoints>[], creator = 'AllTrails.com'): RecordedTrack {
   return {
@@ -91,6 +93,26 @@ describe('recordedMetrics', () => {
     expect(recordedMetrics(track([missing])).activityDate).toBe('2026-07-01T06:00:00Z');
     const backwards = northboundPoints(4).toReversed().map((p, i) => ({ ...northboundPoints(4)[i]!, time: p.time }));
     expect(recordedMetrics(track([backwards])).durationSeconds).toBeNull();
+  });
+
+  it('garde un seuil de 2 m pour les traces enregistrées', () => {
+    expect(RECORDED_HYSTERESIS_M).toBe(2);
+  });
+
+  it('compte les petites bosses de 3 m qu’une rando prévue ignorerait', () => {
+    // Points espacés de ~111 m : la moyenne glissante sur 50 m ne les touche pas.
+    const bumps = northboundPoints(9, { climbM: 0 }).map((p, i) => ({
+      ...p,
+      ele: i % 2 === 0 ? 100 : 103,
+    }));
+    const metrics = recordedMetrics(track([bumps]));
+    expect(metrics.elevationGainMeters).toBe(12);
+    expect(metrics.elevationLossMeters).toBe(12);
+    const asRoute = computeHikeStats(
+      bumps.map(({ lat, lng, ele }) => ({ lat, lng, altM: ele })),
+      DEFAULT_SETTINGS.pace,
+    );
+    expect(asRoute.elevationGainM).toBe(0);
   });
 
   it('échantillonne le profil à 500 points au plus', () => {
