@@ -4,7 +4,7 @@ Outil local de planification de road trips rando à partir de GPX AllTrails.
 **La spec fonctionnelle complète est dans `SPEC.md` : la lire avant toute tâche.**
 
 ## Commandes
-- `npm run dev` : front (5173) + API (5174)
+- `npm run dev` : front (5175) + API (5174)
 - `npm run test` : Vitest
 - `npm run e2e` : Playwright
 - `npm run lint` / `npm run typecheck`

@@ -64,7 +64,7 @@ Aujourd'hui, l'utilisateur prépare ses voyages à la main dans Notion : un tabl
 | Routage | OpenRouteService Directions API, profil `driving-car` | Clé gratuite dans `.env`. |
 | Bornes de recharge | Base nationale IRVE (data.gouv.fr, API tabulaire) ; Open Charge Map pour Electra | IRVE sans clé, France uniquement, mise à jour quotidienne. Open Charge Map optionnel, avec `OPENCHARGEMAP_API_KEY`. |
 | Tests | Vitest (unitaires) + Playwright (1 parcours e2e) | |
-| Lancement | `npm run dev` lance front + back (concurrently) | Ports par défaut : web 5173, api 5174. |
+| Lancement | `npm run dev` lance front + back (concurrently) | Ports par défaut : web 5175 (5173 est souvent pris par un autre projet Vite), api 5174. |
 
 ### Variables d'environnement (`.env`, avec `.env.example` commité)
 ```
@@ -486,3 +486,10 @@ Mesure US2 (2 novembre 2026, sur un voyage réel) : survol du profil → point s
 32. Autonomie : le voyage porte `vehicle` (batterie, niveau au départ, consommation), et l'hébergement `chargesOvernight`. Hypothèses : consommation fixe, 22 kWh/100 km par défaut, sans dénivelé ni froid ; retour à 80 % à chaque borne du planning quelle que soit la pause ; réserve de 15 %. Faut-il tenir compte de la pause et de la puissance ? (Provisoire : non.)
 33. Bibliothèque de randos : `trips/.library/` (`library.json`, `gpx/`), routes `/api/library…`. Un voyage reçoit une copie de la fiche et du GPX, reliée par l'empreinte SHA-256 du fichier, plutôt qu'une référence : il reste autonome, et supprimer une rando de la bibliothèque ne le casse pas. Les modifications ne se propagent donc pas entre voyage et bibliothèque. Faut-il proposer une synchronisation ? (Provisoire : non.)
 34. Rythme réel : la comparaison porte sur toutes les sorties chronométrées, sans distinguer dénivelé, saison ou chien, et ajuste seulement `breakFactor`, à partir de 3 sorties et sur clic. Faut-il affiner vitesse et dénivelé séparément ? (Provisoire : non.)
+
+Relevées pendant l'audit de l'intégration AllTrails (14 novembre 2026, détail dans `ALLTRAILS-AUDIT.md`) :
+
+35. ~~Activités enregistrées : nouvelle entité ?~~ Tranché par David : entité `Activity` dans `trips/.activities/`, distincte des randos de la bibliothèque (itinéraires prévus) et des `Outing` saisies à la main, sans migrer les sorties existantes.
+36. ~~Lien d'une activité ?~~ Tranché par David : vers une rando de la bibliothèque.
+37. ~~Doublons et taille maximale ?~~ Tranché par David : départ à 10 min près, distance à 5 % près, 80 % des points à moins de 50 m ; 10 Mo.
+38. Life OS de la V2 : Notion (§8) ou Obsidian (spec d'intégration AllTrails, §9) ?

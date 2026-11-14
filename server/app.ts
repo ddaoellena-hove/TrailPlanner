@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
 import { z } from 'zod';
 import {
@@ -24,7 +25,8 @@ import { findStations } from './charging';
 import { findPois } from './poi';
 import { tripWeather } from './weather';
 import { geocode } from './geocode';
-import { GpxError, parseGpx } from './gpx';
+import { ActivityNotFoundError, ActivityStore, DuplicateActivityError } from './activity-store';
+import { GpxError, MAX_GPX_BYTES, parseGpx, parseRecordedGpx } from './gpx';
 import { MapLinkError, resolveMapLink } from './map-link';
 import { NotionExportError, type NotionExporter } from './notion';
 import { computeItinerary } from './routing';
@@ -62,6 +64,7 @@ export function createApp({
 }: AppOptions) {
   const store = new TripStore(tripsDir);
   const library = new LibraryStore(tripsDir, store);
+  const activities = new ActivityStore(tripsDir);
   const settings = new SettingsStore(settingsFile ?? path.join(tripsDir, 'settings.json'));
   const app = new Hono();
 
@@ -84,7 +87,21 @@ export function createApp({
     await next();
   });
 
+  // Limite lue avant le décodage multipart : un fichier trop gros n'est jamais chargé.
+  const gpxUploadLimit = bodyLimit({
+    maxSize: MAX_GPX_BYTES,
+    onError: (c) =>
+      c.json({ error: `Fichier trop volumineux (${MAX_GPX_BYTES / 1024 / 1024} Mo maximum)` }, 413),
+  });
+  app.post('/api/trips/:slug/gpx', gpxUploadLimit);
+  app.post('/api/activities', gpxUploadLimit);
+  app.post('/api/activities/preview', gpxUploadLimit);
+
   app.onError((error, c) => {
+    if (error instanceof ActivityNotFoundError) return c.json({ error: 'Activité introuvable' }, 404);
+    if (error instanceof DuplicateActivityError) {
+      return c.json({ error: error.message, duplicate: error.duplicate }, 409);
+    }
     if (error instanceof TripNotFoundError) return c.json({ error: 'Voyage introuvable' }, 404);
     if (error instanceof LibraryHikeNotFoundError) {
       return c.json({ error: 'Rando introuvable' }, 404);
@@ -179,6 +196,51 @@ export function createApp({
       console.warn('Rando non ajoutée à la bibliothèque :', error);
     }
     return c.json(hike, 201);
+  });
+
+  app.get('/api/activities', async (c) => c.json(await activities.list()));
+
+  /** Lit et calcule l'activité sans rien enregistrer, avec l'état de doublon. */
+  app.post('/api/activities/preview', async (c) => {
+    const file = (await c.req.parseBody()).file;
+    if (!(file instanceof File)) return c.json({ error: 'Fichier GPX manquant' }, 400);
+    return c.json(await activities.preview(Buffer.from(await file.arrayBuffer()), file.name));
+  });
+
+  /** Le fichier est renvoyé à la confirmation : le serveur ne garde aucun import en attente. */
+  app.post('/api/activities', async (c) => {
+    const body = await c.req.parseBody();
+    const file = body.file;
+    if (!(file instanceof File)) return c.json({ error: 'Fichier GPX manquant' }, 400);
+    const fields = z
+      .object({
+        title: z.string().trim().max(200).optional(),
+        confirmProbableDuplicate: z.enum(['true', 'false']).optional(),
+      })
+      .safeParse({ title: body.title, confirmProbableDuplicate: body.confirmProbableDuplicate });
+    if (!fields.success) return c.json({ error: 'Import invalide' }, 400);
+    const activity = await activities.add(Buffer.from(await file.arrayBuffer()), file.name, {
+      title: fields.data.title,
+      confirmProbableDuplicate: fields.data.confirmProbableDuplicate === 'true',
+    });
+    return c.json(activity, 201);
+  });
+
+  // L'id ne sert qu'à chercher dans l'index, jamais à construire un chemin disque.
+  app.get('/api/activities/:id', async (c) => c.json(await activities.get(c.req.param('id'))));
+
+  /** Trace complète, segment par segment, relue depuis le GPX original. */
+  app.get('/api/activities/:id/track', async (c) => {
+    const id = c.req.param('id');
+    const { segments } = parseRecordedGpx(await activities.readGpx(id));
+    return c.json({
+      type: 'Feature',
+      properties: { activityId: id },
+      geometry: {
+        type: 'MultiLineString',
+        coordinates: segments.map((points) => points.map(({ lng, lat }) => [lng, lat])),
+      },
+    });
   });
 
   app.get('/api/library', async (c) => c.json(await library.list()));
