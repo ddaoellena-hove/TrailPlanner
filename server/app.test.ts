@@ -200,7 +200,7 @@ describe('API voyages', () => {
     expect(crossSite.status).toBe(403);
     const rebound = await request('/api/trips', { headers: { host: 'evil.example:5174' } });
     expect(rebound.status).toBe(403);
-    const local = await request('/api/trips', { headers: { origin: 'http://127.0.0.1:5173' } });
+    const local = await request('/api/trips', { headers: { origin: 'http://127.0.0.1:5175' } });
     expect(local.status).toBe(200);
   });
 

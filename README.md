@@ -19,7 +19,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Le front est sur http://127.0.0.1:5173 et l'API sur le port 5174. L'app fonctionne sans aucune clé : seul l'export Notion est alors désactivé.
+Le front est sur http://127.0.0.1:5175 et l'API sur le port 5174. L'app fonctionne sans aucune clé : seul l'export Notion est alors désactivé.
 
 | Variable | Rôle |
 | --- | --- |

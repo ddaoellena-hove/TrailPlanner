@@ -64,7 +64,7 @@ Aujourd'hui, l'utilisateur prépare ses voyages à la main dans Notion : un tabl
 | Routage | OpenRouteService Directions API, profil `driving-car` | Clé gratuite dans `.env`. |
 | Bornes de recharge | Base nationale IRVE (data.gouv.fr, API tabulaire) ; Open Charge Map pour Electra | IRVE sans clé, France uniquement, mise à jour quotidienne. Open Charge Map optionnel, avec `OPENCHARGEMAP_API_KEY`. |
 | Tests | Vitest (unitaires) + Playwright (1 parcours e2e) | |
-| Lancement | `npm run dev` lance front + back (concurrently) | Ports par défaut : web 5173, api 5174. |
+| Lancement | `npm run dev` lance front + back (concurrently) | Ports par défaut : web 5175 (5173 est souvent pris par un autre projet Vite), api 5174. |
 
 ### Variables d'environnement (`.env`, avec `.env.example` commité)
 ```
