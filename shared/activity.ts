@@ -62,8 +62,15 @@ function elapsed(points: RecordedPoint[]): {
 }
 
 /**
- * Le dénivelé suit la méthode des randos (moyenne glissante sur 50 m puis hystérésis de 5 m,
- * `shared/gpx.ts`), appliquée à chaque segment séparément. Sans altitude partout : null.
+ * Seuil d'hystérésis des traces enregistrées, plus fin que celui des randos (5 m) : choisi par
+ * David le 14 novembre 2026 sur une sortie AllTrails réelle (D+ 87 m contre 85 m affichés,
+ * 66 m avec 5 m). À confirmer sur des sorties plus montagneuses.
+ */
+export const RECORDED_HYSTERESIS_M = 2;
+
+/**
+ * Le dénivelé reprend la moyenne glissante des randos (50 m, `shared/gpx.ts`) avec le seuil
+ * `RECORDED_HYSTERESIS_M`, segment par segment. Sans altitude partout : null.
  */
 export function recordedMetrics(track: RecordedTrack): RecordedMetrics {
   const { segments } = track;
@@ -83,7 +90,7 @@ export function recordedMetrics(track: RecordedTrack): RecordedMetrics {
         )
       : null;
     if (smoothed) {
-      const change = elevationChange(smoothed);
+      const change = elevationChange(smoothed, RECORDED_HYSTERESIS_M);
       gainM += change.gainM;
       lossM += change.lossM;
     }

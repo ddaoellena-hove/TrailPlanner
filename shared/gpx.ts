@@ -45,13 +45,16 @@ export function smoothAltitudes(altitudes: number[], distancesKm: number[]): num
   });
 }
 
-export function elevationChange(altitudes: number[]): { gainM: number; lossM: number } {
+export function elevationChange(
+  altitudes: number[],
+  hysteresisM = ELEVATION_HYSTERESIS_M,
+): { gainM: number; lossM: number } {
   let gainM = 0;
   let lossM = 0;
   let reference = altitudes[0] ?? 0;
   for (const altitude of altitudes) {
     const delta = altitude - reference;
-    if (Math.abs(delta) < ELEVATION_HYSTERESIS_M) continue;
+    if (Math.abs(delta) < hysteresisM) continue;
     if (delta > 0) gainM += delta;
     else lossM -= delta;
     reference = altitude;

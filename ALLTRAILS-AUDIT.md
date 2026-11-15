@@ -131,3 +131,15 @@ Implemented as approved, with these precisions (all documented in README → "Ac
 - **Probable duplicate** follows D6; when one side has no time, geometry and distance decide alone. Duration is not compared (not part of D6).
 - The 10 MB limit and the DOCTYPE / coordinate checks also apply to route import in trips.
 - Tests use synthetic recordings (`shared/recorded-gpx.fixture.ts`) until a real AllTrails recording is provided.
+
+### First real recording (2026-11-14)
+"Sur les Traces de Voltaire", AllTrails export, 1,697 points, one segment, times and elevations on every point, no ID.
+
+| | TrailPlanner | AllTrails |
+|---|---|---|
+| Distance | 6.80 km | 6.81 km |
+| Total time | 1 h 25 min 24 s | 1 h 25 |
+| Elevation gain, 5 m threshold | 66 m | 85 m |
+| Elevation gain, 2 m threshold | 87 m | 85 m |
+
+Decision (David): recordings use a 2 m hysteresis (`RECORDED_HYSTERESIS_M`), routes keep 5 m. Validated on one gentle lowland hike only; to confirm on hillier recordings. Times are UTC: the UI must display them in local time (Phase 3).
