@@ -13,6 +13,14 @@ const RECORDINGS = [
     elevationGainM: 85,
     totalTimeMin: 85,
   },
+  {
+    file: 'vallee-du-crevon.gpx',
+    title: "Randonnée de l'après-midi à Ry - Epinay - Saint-Denis-le-Thiboult : Vallée du Crevon",
+    activityDate: '2026-11-15T13:57:03Z',
+    distanceKm: 7.65,
+    elevationGainM: 169,
+    totalTimeMin: 96,
+  },
 ];
 
 describe.each(RECORDINGS)('sortie AllTrails réelle : $file', (expected) => {
