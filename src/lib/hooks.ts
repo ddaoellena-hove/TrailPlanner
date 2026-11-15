@@ -46,8 +46,13 @@ export function useActivityTrack(id: string) {
   });
 }
 
+/** Rafraîchi toutes les 30 s quand la synchronisation automatique est active. */
 export function useSyncStatus() {
-  return useQuery({ queryKey: ['activity-sync'], queryFn: api.syncStatus });
+  return useQuery({
+    queryKey: ['activity-sync'],
+    queryFn: api.syncStatus,
+    refetchInterval: (query) => (query.state.data?.autoSync ? 30_000 : false),
+  });
 }
 
 export function useLibrary() {

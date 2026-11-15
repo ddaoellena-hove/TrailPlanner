@@ -208,17 +208,34 @@ export const SyncReportSchema = z.object({
 });
 export type SyncReport = z.infer<typeof SyncReportSchema>;
 
+export const SyncErrorSchema = z.object({ at: IsoDateTimeSchema, message: z.string() });
+export type SyncErrorInfo = z.infer<typeof SyncErrorSchema>;
+
 export const SyncLedgerSchema = z.object({
   schemaVersion: z.literal(1),
   files: z.record(z.string().regex(/^[0-9a-f]{64}$/), SyncFileSchema),
+  /**
+   * Taille et date de modification de chaque fichier du dossier, avec son empreinte : un
+   * fichier inchangé et déjà traité n'est plus relu.
+   */
+  seen: z
+    .record(
+      z.string(),
+      z.object({ size: z.number().int().nonnegative(), mtimeMs: z.number(), hash: z.string() }),
+    )
+    .optional(),
   lastRun: SyncReportSchema.optional(),
+  /** Dernier passage impossible (dossier absent, illisible…), effacé par un passage réussi. */
+  lastError: SyncErrorSchema.optional(),
 });
 export type SyncLedger = z.infer<typeof SyncLedgerSchema>;
 
 export const SyncStatusSchema = z.object({
   folder: z.string().nullable(),
   running: z.boolean(),
+  autoSync: z.boolean(),
   lastRun: SyncReportSchema.nullable(),
+  lastError: SyncErrorSchema.nullable(),
   pending: z.array(SyncFileSchema.extend({ hash: z.string() })),
 });
 export type SyncStatus = z.infer<typeof SyncStatusSchema>;
@@ -425,6 +442,8 @@ export const SettingsSchema = z.object({
   favoriteStations: z.array(FavoriteStationSchema).optional(),
   /** Dossier où déposer les exports GPX d'AllTrails, importés par la synchronisation. */
   activityImportFolder: z.string().min(1).optional(),
+  /** Synchronisation automatique du dossier, désactivée par défaut. */
+  activityAutoSync: z.boolean().optional(),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 

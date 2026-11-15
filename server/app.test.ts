@@ -510,7 +510,9 @@ describe('API voyages', () => {
       expect(await (await request('/api/activities/sync')).json()).toEqual({
         folder: null,
         running: false,
+        autoSync: false,
         lastRun: null,
+        lastError: null,
         pending: [],
       });
     });

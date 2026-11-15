@@ -173,4 +173,37 @@ describe('synchronisation depuis un dossier', () => {
     await expect(new FolderConnector(file).list()).rejects.toThrow("n'est pas un dossier");
     expect(() => new FolderConnector('exports')).toThrow(ConnectorError);
   });
+  it('ne relit pas un fichier inchangé déjà traité, mais relit un fichier modifié', async () => {
+    await drop('matin.gpx', morning);
+    await drop('semaine.gpx', otherDay);
+    await sync.run(connector);
+
+    const reads: string[] = [];
+    const counting = new FolderConnector(folder);
+    const read = counting.read.bind(counting);
+    counting.read = (fileName) => {
+      reads.push(fileName);
+      return read(fileName);
+    };
+    expect((await sync.run(counting)).alreadyHandled).toBe(2);
+    expect(reads).toEqual([]);
+
+    // Réexporté sous le même nom avec un autre contenu : relu, et importé.
+    await drop('semaine.gpx', sameOuting.replace('Montre', 'Autre sortie').replace(/06:0/g, '09:0'));
+    const report = await sync.run(counting);
+    expect(reads).toEqual(['semaine.gpx']);
+    expect(report.imported).toEqual(['semaine.gpx']);
+  });
+
+  it('retient un passage impossible, puis l’efface au passage suivant réussi', async () => {
+    await rm(folder, { recursive: true });
+    await expect(sync.run(connector)).rejects.toThrow('Dossier introuvable');
+    const failed = await sync.status(folder);
+    expect(failed.lastError?.message).toContain('Dossier introuvable');
+    expect(failed.lastRun).toBeNull();
+
+    await mkdir(folder);
+    await sync.run(connector);
+    expect((await sync.status(folder)).lastError).toBeNull();
+  });
 });
