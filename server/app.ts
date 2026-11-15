@@ -28,6 +28,7 @@ import { geocode } from './geocode';
 import { ActivityNotFoundError, ActivityStore, DuplicateActivityError } from './activity-store';
 import { ConnectorError, FolderConnector } from './activity-connector';
 import { ActivitySync, SyncError } from './activity-sync';
+import { AutoSync } from './auto-sync';
 import { GpxError, MAX_GPX_BYTES, parseGpx, parseRecordedGpx } from './gpx';
 import { MapLinkError, resolveMapLink } from './map-link';
 import { NotionExportError, type NotionExporter } from './notion';
@@ -53,6 +54,8 @@ type AppOptions = {
   openChargeMapKey?: string;
   notion?: NotionExporter;
   assistants?: AssistantProvider[];
+  /** Démarre les passages automatiques du dossier surveillé (le serveur, pas les tests). */
+  autoSync?: boolean;
 };
 
 export function createApp({
@@ -63,12 +66,14 @@ export function createApp({
   openChargeMapKey,
   notion,
   assistants = [],
+  autoSync = false,
 }: AppOptions) {
   const store = new TripStore(tripsDir);
   const library = new LibraryStore(tripsDir, store);
   const activities = new ActivityStore(tripsDir);
   const sync = new ActivitySync(tripsDir, activities);
   const settings = new SettingsStore(settingsFile ?? path.join(tripsDir, 'settings.json'));
+  if (autoSync) new AutoSync(sync, () => settings.read()).start();
   const app = new Hono();
 
   // Écouter sur 127.0.0.1 ne suffit pas : un site ouvert dans le navigateur peut viser
@@ -217,9 +222,10 @@ export function createApp({
     return new FolderConnector(folder);
   };
 
-  app.get('/api/activities/sync', async (c) =>
-    c.json(await sync.status((await settings.read()).activityImportFolder ?? null)),
-  );
+  app.get('/api/activities/sync', async (c) => {
+    const { activityImportFolder, activityAutoSync } = await settings.read();
+    return c.json(await sync.status(activityImportFolder ?? null, activityAutoSync === true));
+  });
 
   /** Importe les nouveaux GPX du dossier. Un passage déjà en cours est partagé, pas doublé. */
   app.post('/api/activities/sync', async (c) => c.json(await sync.run(await syncFolder())));

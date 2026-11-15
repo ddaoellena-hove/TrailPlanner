@@ -1,10 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, FolderSync, Loader2, RefreshCw } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/api';
 import { useSettings, useSyncStatus } from '@/lib/hooks';
 import { formatShortDate, formatTimeOfDay } from '../../shared/format';
@@ -94,6 +95,32 @@ function RunReport({ report }: { report: SyncReport }) {
   );
 }
 
+function AutoSyncSwitch({ enabled }: { enabled: boolean }) {
+  const queryClient = useQueryClient();
+  const settings = useSettings();
+  const save = useMutation({
+    mutationFn: (activityAutoSync: boolean) => api.saveSettings({ ...settings, activityAutoSync }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['settings'] });
+      await queryClient.invalidateQueries({ queryKey: ['activity-sync'] });
+    },
+    onError: (error) => toast.error(`Réglage non enregistré : ${error.message}`),
+  });
+  return (
+    <div className="flex items-center gap-2">
+      <Switch
+        id="auto-sync"
+        checked={enabled}
+        disabled={save.isPending}
+        onCheckedChange={(checked) => save.mutate(checked)}
+      />
+      <Label htmlFor="auto-sync" className="font-normal">
+        Synchroniser automatiquement toutes les 5 minutes
+      </Label>
+    </div>
+  );
+}
+
 /**
  * Synchronisation depuis le dossier surveillé : réglage du dossier, passage à la demande,
  * compte rendu, et choix sur les doublons probables mis en attente.
@@ -108,6 +135,14 @@ export function SyncPanel({
   const queryClient = useQueryClient();
   const status = useSyncStatus();
   const [editing, setEditing] = useState(false);
+  // Un passage automatique a pu importer des sorties : la liste suit le dernier passage.
+  const lastFinished = status.data?.lastRun?.finishedAt;
+  const seenRun = useRef(lastFinished);
+  useEffect(() => {
+    if (lastFinished === seenRun.current) return;
+    seenRun.current = lastFinished;
+    void queryClient.invalidateQueries({ queryKey: ['activities'] });
+  }, [lastFinished, queryClient]);
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ['activity-sync'] });
     await queryClient.invalidateQueries({ queryKey: ['activities'] });
@@ -136,7 +171,7 @@ export function SyncPanel({
       </p>
     );
   }
-  const { folder, lastRun, pending } = status.data;
+  const { folder, lastRun, lastError, pending, autoSync } = status.data;
   const running = run.isPending || status.data.running;
 
   return (
@@ -171,6 +206,16 @@ export function SyncPanel({
           <Button variant="link" size="sm" className="h-auto p-0" onClick={() => setEditing(true)}>
             Modifier
           </Button>
+        </p>
+      )}
+
+      {folder && !editing && <AutoSyncSwitch enabled={autoSync} />}
+
+      {lastError && (
+        <p role="alert" className="text-sm text-destructive">
+          Synchronisation impossible le {formatShortDate(lastError.at)} à{' '}
+          {formatTimeOfDay(lastError.at)} : {lastError.message}. Vérifiez le dossier, puis
+          relancez.
         </p>
       )}
 

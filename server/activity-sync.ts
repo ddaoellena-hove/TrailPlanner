@@ -67,12 +67,14 @@ export class ActivitySync {
     return this.running !== null;
   }
 
-  async status(folder: string | null): Promise<SyncStatus> {
+  async status(folder: string | null, autoSync = false): Promise<SyncStatus> {
     const ledger = await this.exclusive(() => this.load());
     return {
       folder,
       running: this.isRunning,
+      autoSync,
       lastRun: ledger.lastRun ?? null,
+      lastError: ledger.lastError ?? null,
       pending: Object.entries(ledger.files)
         .filter(([, file]) => file.status === 'pending')
         .map(([hash, file]) => ({ ...file, hash })),
@@ -104,7 +106,30 @@ export class ActivitySync {
       ledger.files[hash] = { ...file, at: new Date().toISOString() };
     };
 
-    for (const { fileName } of await connector.list()) {
+    let candidates;
+    try {
+      candidates = await connector.list();
+    } catch (error) {
+      // Le passage n'a pas eu lieu : on le retient pour l'afficher, sans toucher au reste.
+      ledger.lastError = { at: new Date().toISOString(), message: errorMessage(error) };
+      await this.save(ledger);
+      throw error;
+    }
+
+    const previous = ledger.seen ?? {};
+    const seen: NonNullable<SyncLedger['seen']> = {};
+    for (const { fileName, size, mtimeMs } of candidates) {
+      const cached = previous[fileName];
+      if (
+        cached?.size === size &&
+        cached.mtimeMs === mtimeMs &&
+        FINAL.includes(ledger.files[cached.hash]?.status ?? 'failed')
+      ) {
+        // Inchangé et déjà traité : pas besoin de le relire.
+        seen[fileName] = cached;
+        report.alreadyHandled++;
+        continue;
+      }
       let bytes: Buffer;
       try {
         bytes = await connector.read(fileName);
@@ -113,6 +138,7 @@ export class ActivitySync {
         continue;
       }
       const hash = hashOf(bytes);
+      seen[fileName] = { size, mtimeMs, hash };
       const known = ledger.files[hash];
       if (known && FINAL.includes(known.status)) {
         report.alreadyHandled++;
@@ -136,6 +162,8 @@ export class ActivitySync {
 
     report.finishedAt = new Date().toISOString();
     ledger.lastRun = report;
+    ledger.seen = seen;
+    delete ledger.lastError;
     await this.save(ledger);
     return report;
   }

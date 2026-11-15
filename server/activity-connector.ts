@@ -5,7 +5,7 @@ import { MAX_GPX_BYTES } from './gpx';
 export class ConnectorError extends Error {}
 
 /** Fichier proposé par une source : rien n'est lu tant que la synchronisation ne le demande pas. */
-export type Candidate = { fileName: string; size: number };
+export type Candidate = { fileName: string; size: number; mtimeMs: number };
 
 /**
  * Source de sorties. Une source ne fait que fournir des octets GPX : validation, doublons et
@@ -57,7 +57,7 @@ export class FolderConnector implements ActivityConnector {
       if (!entry.isFile() || !/\.gpx$/i.test(entry.name) || entry.name.startsWith('.')) continue;
       const info = await stat(path.join(this.folder, entry.name));
       if (this.now() - info.mtimeMs < SETTLE_MS) continue;
-      candidates.push({ fileName: entry.name, size: info.size });
+      candidates.push({ fileName: entry.name, size: info.size, mtimeMs: info.mtimeMs });
     }
     return candidates.toSorted((a, b) => a.fileName.localeCompare(b.fileName));
   }

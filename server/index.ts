@@ -43,6 +43,7 @@ const app = createApp({
       assistants.map(({ id }) => id),
     )),
   assistants,
+  autoSync: true,
 });
 
 const port = Number(process.env.API_PORT ?? 5174);
