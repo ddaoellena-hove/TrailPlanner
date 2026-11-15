@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { ActivityBadges, SourceBadge } from '@/components/ActivityStats';
 import { ActivityImportDialog } from '@/components/ActivityImportDialog';
 import { ActivitySheet } from '@/components/ActivitySheet';
+import { SyncPanel } from '@/components/SyncPanel';
 import { TrackMap } from '@/components/TrackMap';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -43,6 +44,8 @@ export function ActivitiesPage() {
           Importer une sortie
         </Button>
       </div>
+
+      <SyncPanel activities={list} onOpen={setOpenId} />
 
       {activities.isPending && <Skeleton className="h-44" />}
       {activities.isError && (

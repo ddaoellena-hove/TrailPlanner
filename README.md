@@ -51,7 +51,7 @@ L'e2e écrit dans `.e2e-trips/` et neutralise `NOTION_TOKEN`, `ORS_API_KEY`, `OP
 - **Voyages :** création, duplication, corbeille dans `trips/.trash`. Nom, dates, chien, voiture électrique, départ et arrivée se modifient directement dans la page.
 - **Randos :** import de plusieurs GPX, fiche complète, remplacement du tracé sans perdre le planning. Le GPX original n'est jamais modifié.
 - **Mes randos :** bibliothèque commune aux voyages, alimentée par les imports : recherche, filtres, carte, notes, sorties réalisées, comparaison du prévu au réel et ajustement du rythme en un clic. Une rando s'ajoute à un voyage par copie.
-- **Mes sorties :** historique des sorties enregistrées avec AllTrails, distinct des randos prévues : import d'un GPX avec aperçu et confirmation, doublons refusés ou soumis à un choix, liste, carte, fiche avec trace complète et profil. Heures affichées à l'heure de Paris.
+- **Mes sorties :** historique des sorties enregistrées avec AllTrails, distinct des randos prévues : import d'un GPX avec aperçu et confirmation, doublons refusés ou soumis à un choix, liste, carte, fiche avec trace complète et profil. Heures affichées à l'heure de Paris. Synchronisation depuis un dossier d'exports GPX : bouton « Synchroniser maintenant », compte rendu, choix sur les doublons probables.
 - **Planning :** étapes glissées dans un jour ou entre jours, trajets calculés dans la timeline, nuits, replis, notes, totaux et charge par jour. Annuler/rétablir sur 50 niveaux, `Ctrl/Cmd+S`.
 - **Étapes :** avec trail, ou de séjour avec autocomplétion d'adresse. Chacune a un départ, par défaut le séjour précédent, et un séjour avec lien.
 - **Carte :** fond Plan IGN, photos aériennes ou OpenStreetMap, atténuable, couches de terrain à superposer (relief, pentes, courbes, eau, routes, traces hivernales), éléments du voyage masquables, tracés colorés par jour, filtre par jour, trajet du trail à l'hôtel en violet, profil altimétrique synchronisé, ajout d'un lieu au clic droit.
@@ -102,6 +102,9 @@ Les activités enregistrées (intégration AllTrails, en cours) vivent dans `tri
 | POST | `/api/activities` | multipart `file`, `title?`, `confirmProbableDuplicate?` : importe ; 409 sur doublon |
 | GET | `/api/activities/:id` | une activité |
 | GET | `/api/activities/:id/track` | trace complète en GeoJSON `MultiLineString`, un tracé par segment |
+| GET | `/api/activities/sync` | dossier surveillé, dernier passage, fichiers en attente d'un choix |
+| POST | `/api/activities/sync` | importe les nouveaux GPX du dossier ; renvoie importés, doublons, en attente, échecs |
+| POST | `/api/activities/sync/decisions` | `{ hash, action: "import" \| "ignore" }` pour un doublon probable en attente |
 
 - **Unités :** mètres et secondes, contrairement aux randos (km, minutes). Heures ISO 8601 recopiées telles qu'écrites dans le fichier, fuseau compris.
 - **Mesures, toutes calculées (`metricsOrigin`) :** distance haversine cumulée segment par segment, sans relier deux segments ; durée **écoulée** entre la première et la dernière heure, pauses comprises, jamais un temps en mouvement ; D+/D− par segment, avec la moyenne sur 50 m des randos mais un seuil de 2 m au lieu de 5 m (`RECORDED_HYSTERESIS_M`), choisi sur une sortie AllTrails réelle.
@@ -110,6 +113,7 @@ Les activités enregistrées (intégration AllTrails, en cours) vivent dans `tri
 - **Doublons :** même SHA-256 → refusé. Doublon probable (départ à 10 min près, distance à 5 % près, 80 % des points à moins de 50 m de l'autre trace, dans les deux sens) → refusé sauf confirmation. Sans heure d'un côté, la géométrie décide seule. Jamais de fusion.
 - **Sécurité :** GPX de 10 Mo au plus (aussi pour les randos d'un voyage), DTD et entités refusées, coordonnées hors bornes refusées.
 - **Atomicité :** le GPX est écrit, puis l'index ; si l'index échoue, le GPX est retiré.
+- **Dossier surveillé (`activityImportFolder`, chemin absolu) :** seuls les `.gpx` du premier niveau sont lus, jamais modifiés, déplacés ni supprimés ; un fichier modifié depuis moins de 5 s attend le passage suivant. `trips/.activities/sync.json` retient chaque fichier par son SHA-256 : importé, doublon ou écarté n'est plus relu, un doublon probable attend un choix, un échec est retenté.
 
 ## Services externes
 

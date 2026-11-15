@@ -7,6 +7,12 @@ import {
   ActivityPreviewSchema,
   ActivitySchema,
   type ChargingSearch,
+  type SyncFile,
+  SyncFileSchema,
+  type SyncReport,
+  SyncReportSchema,
+  type SyncStatus,
+  SyncStatusSchema,
   ChargingSearchSchema,
   type DayWeather,
   DayWeatherSchema,
@@ -135,6 +141,25 @@ export const api = {
       .object({ geometry: z.object({ coordinates: z.array(z.array(z.array(z.number()))) }) })
       .parse(await response.json());
     return feature.geometry.coordinates;
+  },
+
+  async syncStatus(): Promise<SyncStatus> {
+    return SyncStatusSchema.parse(await (await request('/activities/sync')).json());
+  },
+
+  /** Importe les nouveaux GPX du dossier surveillé. */
+  async runSync(): Promise<SyncReport> {
+    const response = await request('/activities/sync', { method: 'POST' });
+    return SyncReportSchema.parse(await response.json());
+  },
+
+  async decideSync(hash: string, action: 'import' | 'ignore'): Promise<SyncFile> {
+    const response = await request('/activities/sync/decisions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ hash, action }),
+    });
+    return SyncFileSchema.parse(await response.json());
   },
 
   async library(): Promise<LibraryHike[]> {
