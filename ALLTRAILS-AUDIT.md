@@ -146,3 +146,6 @@ Decision (David): recordings use a 2 m hysteresis (`RECORDED_HYSTERESIS_M`), rou
 
 ### Life OS target (2026-11-15)
 Decided by David: Notion is no longer used to document trails; Phase 5 targets the **Obsidian** Life OS. Still needed: the vault path and one existing (Garmin) activity note with its YAML front matter. The trip notebook export to Notion (SPEC §8) is unchanged pending SPEC Q39.
+
+### Second real recording (2026-11-15)
+"Vallée du Crevon" (Ry – Épinay – Saint-Denis-le-Thiboult), AllTrails export, 1,963 points, one segment. TrailPlanner 7.64 km / +162 m / 1 h 36 against AllTrails 7.65 km / 169 m / 1 h 36 (D+ −4 %). Elevation gain by threshold: 5 m → 157 m, 3 m → 166 m, 2 m → 162 m. Across both recordings, 2 m is the only threshold within ±5 % of AllTrails; kept. Added to `fixtures/recordings/` at David's request.
