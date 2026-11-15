@@ -102,6 +102,9 @@ Les activités enregistrées (intégration AllTrails, en cours) vivent dans `tri
 | POST | `/api/activities` | multipart `file`, `title?`, `confirmProbableDuplicate?` : importe ; 409 sur doublon |
 | GET | `/api/activities/:id` | une activité |
 | GET | `/api/activities/:id/track` | trace complète en GeoJSON `MultiLineString`, un tracé par segment |
+| GET | `/api/activities/sync` | dossier surveillé, dernier passage, fichiers en attente d'un choix |
+| POST | `/api/activities/sync` | importe les nouveaux GPX du dossier ; renvoie importés, doublons, en attente, échecs |
+| POST | `/api/activities/sync/decisions` | `{ hash, action: "import" \| "ignore" }` pour un doublon probable en attente |
 
 - **Unités :** mètres et secondes, contrairement aux randos (km, minutes). Heures ISO 8601 recopiées telles qu'écrites dans le fichier, fuseau compris.
 - **Mesures, toutes calculées (`metricsOrigin`) :** distance haversine cumulée segment par segment, sans relier deux segments ; durée **écoulée** entre la première et la dernière heure, pauses comprises, jamais un temps en mouvement ; D+/D− par segment, avec la moyenne sur 50 m des randos mais un seuil de 2 m au lieu de 5 m (`RECORDED_HYSTERESIS_M`), choisi sur une sortie AllTrails réelle.
@@ -110,6 +113,7 @@ Les activités enregistrées (intégration AllTrails, en cours) vivent dans `tri
 - **Doublons :** même SHA-256 → refusé. Doublon probable (départ à 10 min près, distance à 5 % près, 80 % des points à moins de 50 m de l'autre trace, dans les deux sens) → refusé sauf confirmation. Sans heure d'un côté, la géométrie décide seule. Jamais de fusion.
 - **Sécurité :** GPX de 10 Mo au plus (aussi pour les randos d'un voyage), DTD et entités refusées, coordonnées hors bornes refusées.
 - **Atomicité :** le GPX est écrit, puis l'index ; si l'index échoue, le GPX est retiré.
+- **Dossier surveillé (`activityImportFolder`, chemin absolu) :** seuls les `.gpx` du premier niveau sont lus, jamais modifiés, déplacés ni supprimés ; un fichier modifié depuis moins de 5 s attend le passage suivant. `trips/.activities/sync.json` retient chaque fichier par son SHA-256 : importé, doublon ou écarté n'est plus relu, un doublon probable attend un choix, un échec est retenté.
 
 ## Services externes
 

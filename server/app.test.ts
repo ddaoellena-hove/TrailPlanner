@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -490,6 +490,55 @@ describe('API voyages', () => {
       const { slug } = await createTrip();
       expect((await uploadGpx(slug, huge)).status).toBe(413);
       expect(await (await request('/api/activities')).json()).toEqual([]);
+    });
+  });
+  describe('synchronisation par dossier', () => {
+    const putSettings = async (changes: Partial<Settings>) => {
+      const current = (await (await request('/api/settings')).json()) as Settings;
+      return request('/api/settings', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...current, ...changes }),
+      });
+    };
+
+    it('refuse un dossier relatif et ne lit rien sans dossier réglé', async () => {
+      expect((await putSettings({ activityImportFolder: 'exports' })).status).toBe(400);
+      const response = await request('/api/activities/sync', { method: 'POST' });
+      expect(response.status).toBe(400);
+      expect((await response.json()).error).toBe('Aucun dossier de synchronisation réglé');
+      expect(await (await request('/api/activities/sync')).json()).toEqual({
+        folder: null,
+        running: false,
+        lastRun: null,
+        pending: [],
+      });
+    });
+
+    it('importe les GPX du dossier et rend compte du passage', async () => {
+      const folder = path.join(dir, 'exports');
+      await mkdir(folder);
+      const file = path.join(folder, 'sortie.gpx');
+      await writeFile(file, recordedGpx([northboundPoints(20)]));
+      const past = new Date(Date.now() - 60_000);
+      await utimes(file, past, past);
+      expect((await putSettings({ activityImportFolder: folder })).status).toBe(200);
+
+      const response = await request('/api/activities/sync', { method: 'POST' });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ folder, imported: ['sortie.gpx'], failed: [] });
+      expect(await (await request('/api/activities')).json()).toHaveLength(1);
+      expect(await (await request('/api/activities/sync')).json()).toMatchObject({
+        folder,
+        lastRun: { imported: ['sortie.gpx'] },
+      });
+
+      const unknown = await post('/api/activities/sync/decisions', {
+        hash: 'a'.repeat(64),
+        action: 'import',
+      });
+      expect(unknown.status).toBe(400);
+      expect((await post('/api/activities/sync/decisions', { hash: 'x', action: 'import' })).status).toBe(400);
     });
   });
 });

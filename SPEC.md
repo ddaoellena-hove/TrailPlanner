@@ -492,4 +492,6 @@ Relevées pendant l'audit de l'intégration AllTrails (14 novembre 2026, détail
 35. ~~Activités enregistrées : nouvelle entité ?~~ Tranché par David : entité `Activity` dans `trips/.activities/`, distincte des randos de la bibliothèque (itinéraires prévus) et des `Outing` saisies à la main, sans migrer les sorties existantes.
 36. ~~Lien d'une activité ?~~ Tranché par David : vers une rando de la bibliothèque.
 37. ~~Doublons et taille maximale ?~~ Tranché par David : départ à 10 min près, distance à 5 % près, 80 % des points à moins de 50 m ; 10 Mo.
-38. Life OS de la V2 : Notion (§8) ou Obsidian (spec d'intégration AllTrails, §9) ?
+38. ~~Life OS de la V2 : Notion ou Obsidian ?~~ Tranché par David (15 novembre 2026) : Notion n'est plus utilisé pour documenter les randos ; la cible des sorties est le Life OS Obsidian.
+39. L'export Notion des voyages (§8, M5) reste-t-il utile, puisque Notion n'est plus utilisé pour les randos ? Faut-il le retirer, le garder tel quel, ou le remplacer par un export Obsidian du carnet ? (Provisoire : gardé tel quel, rien n'est retiré.)
+40. ~~Synchronisation automatique AllTrails ?~~ Tranché par David : aucun accès autorisé (pas d'API publique), donc dossier surveillé où déposer les exports GPX, importés par le pipeline existant (`activityImportFolder`, `trips/.activities/sync.json`).

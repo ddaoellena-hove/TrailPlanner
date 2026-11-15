@@ -181,6 +181,48 @@ export const ActivityPreviewSchema = z.object({
 });
 export type ActivityPreview = z.infer<typeof ActivityPreviewSchema>;
 
+/**
+ * Fichier du dossier surveillé déjà traité, repéré par son SHA-256 : `imported` et
+ * `duplicate` sont définitifs, `pending` attend un choix, `failed` est retenté.
+ */
+export const SyncFileSchema = z.object({
+  fileName: z.string().min(1),
+  status: z.enum(['imported', 'duplicate', 'pending', 'ignored', 'failed']),
+  /** Sortie créée (`imported`), ou sortie déjà présente (`duplicate`, `pending`). */
+  activityId: z.uuid().optional(),
+  error: z.string().optional(),
+  at: IsoDateTimeSchema,
+});
+export type SyncFile = z.infer<typeof SyncFileSchema>;
+
+export const SyncReportSchema = z.object({
+  startedAt: IsoDateTimeSchema,
+  finishedAt: IsoDateTimeSchema,
+  folder: z.string(),
+  imported: z.array(z.string()),
+  duplicates: z.array(z.string()),
+  pending: z.array(z.string()),
+  failed: z.array(z.object({ fileName: z.string(), error: z.string() })),
+  /** Fichiers déjà traités lors d'un passage précédent. */
+  alreadyHandled: z.number().int().nonnegative(),
+});
+export type SyncReport = z.infer<typeof SyncReportSchema>;
+
+export const SyncLedgerSchema = z.object({
+  schemaVersion: z.literal(1),
+  files: z.record(z.string().regex(/^[0-9a-f]{64}$/), SyncFileSchema),
+  lastRun: SyncReportSchema.optional(),
+});
+export type SyncLedger = z.infer<typeof SyncLedgerSchema>;
+
+export const SyncStatusSchema = z.object({
+  folder: z.string().nullable(),
+  running: z.boolean(),
+  lastRun: SyncReportSchema.nullable(),
+  pending: z.array(SyncFileSchema.extend({ hash: z.string() })),
+});
+export type SyncStatus = z.infer<typeof SyncStatusSchema>;
+
 export const StopSchema = z.discriminatedUnion('kind', [
   z.object({
     id: z.uuid(),
@@ -381,6 +423,8 @@ export const SettingsSchema = z.object({
   favoriteNetworks: z.array(z.string()).optional(),
   favoriteNetworksOnly: z.boolean().optional(),
   favoriteStations: z.array(FavoriteStationSchema).optional(),
+  /** Dossier où déposer les exports GPX d'AllTrails, importés par la synchronisation. */
+  activityImportFolder: z.string().min(1).optional(),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 

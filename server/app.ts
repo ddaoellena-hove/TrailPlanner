@@ -26,6 +26,8 @@ import { findPois } from './poi';
 import { tripWeather } from './weather';
 import { geocode } from './geocode';
 import { ActivityNotFoundError, ActivityStore, DuplicateActivityError } from './activity-store';
+import { ConnectorError, FolderConnector } from './activity-connector';
+import { ActivitySync, SyncError } from './activity-sync';
 import { GpxError, MAX_GPX_BYTES, parseGpx, parseRecordedGpx } from './gpx';
 import { MapLinkError, resolveMapLink } from './map-link';
 import { NotionExportError, type NotionExporter } from './notion';
@@ -65,6 +67,7 @@ export function createApp({
   const store = new TripStore(tripsDir);
   const library = new LibraryStore(tripsDir, store);
   const activities = new ActivityStore(tripsDir);
+  const sync = new ActivitySync(tripsDir, activities);
   const settings = new SettingsStore(settingsFile ?? path.join(tripsDir, 'settings.json'));
   const app = new Hono();
 
@@ -99,6 +102,9 @@ export function createApp({
 
   app.onError((error, c) => {
     if (error instanceof ActivityNotFoundError) return c.json({ error: 'Activité introuvable' }, 404);
+    if (error instanceof ConnectorError || error instanceof SyncError) {
+      return c.json({ error: error.message }, 400);
+    }
     if (error instanceof DuplicateActivityError) {
       return c.json({ error: error.message, duplicate: error.duplicate }, 409);
     }
@@ -120,6 +126,10 @@ export function createApp({
   app.put('/api/settings', async (c) => {
     const body = SettingsSchema.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return c.json({ error: 'Réglages invalides' }, 400);
+    const folder = body.data.activityImportFolder;
+    if (folder !== undefined && !path.isAbsolute(folder)) {
+      return c.json({ error: 'Le dossier de synchronisation doit être un chemin absolu' }, 400);
+    }
     const { pace } = await settings.read();
     await settings.write(body.data);
     // Réécrire tous les voyages n'a de sens que si le rythme change, pas pour une couche.
@@ -199,6 +209,29 @@ export function createApp({
   });
 
   app.get('/api/activities', async (c) => c.json(await activities.list()));
+
+  /** Dossier surveillé, réglé dans les réglages ; sans lui, rien n'est lu. */
+  const syncFolder = async (): Promise<FolderConnector> => {
+    const folder = (await settings.read()).activityImportFolder;
+    if (!folder) throw new SyncError('Aucun dossier de synchronisation réglé');
+    return new FolderConnector(folder);
+  };
+
+  app.get('/api/activities/sync', async (c) =>
+    c.json(await sync.status((await settings.read()).activityImportFolder ?? null)),
+  );
+
+  /** Importe les nouveaux GPX du dossier. Un passage déjà en cours est partagé, pas doublé. */
+  app.post('/api/activities/sync', async (c) => c.json(await sync.run(await syncFolder())));
+
+  /** Doublon probable trouvé par la synchronisation : l'importer quand même, ou l'écarter. */
+  app.post('/api/activities/sync/decisions', async (c) => {
+    const body = z
+      .object({ hash: z.string().regex(/^[0-9a-f]{64}$/), action: z.enum(['import', 'ignore']) })
+      .safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: 'Choix invalide' }, 400);
+    return c.json(await sync.decide(await syncFolder(), body.data.hash, body.data.action));
+  });
 
   /** Lit et calcule l'activité sans rien enregistrer, avec l'état de doublon. */
   app.post('/api/activities/preview', async (c) => {

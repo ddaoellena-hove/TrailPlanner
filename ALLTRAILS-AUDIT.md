@@ -143,3 +143,6 @@ Implemented as approved, with these precisions (all documented in README → "Ac
 | Elevation gain, 2 m threshold | 87 m | 85 m |
 
 Decision (David): recordings use a 2 m hysteresis (`RECORDED_HYSTERESIS_M`), routes keep 5 m. Validated on one gentle lowland hike only; to confirm on hillier recordings. Times are UTC: the UI must display them in local time (Phase 3).
+
+### Life OS target (2026-11-15)
+Decided by David: Notion is no longer used to document trails; Phase 5 targets the **Obsidian** Life OS. Still needed: the vault path and one existing (Garmin) activity note with its YAML front matter. The trip notebook export to Notion (SPEC §8) is unchanged pending SPEC Q39.
