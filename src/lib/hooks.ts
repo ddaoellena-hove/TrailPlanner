@@ -46,6 +46,10 @@ export function useActivityTrack(id: string) {
   });
 }
 
+export function useSyncStatus() {
+  return useQuery({ queryKey: ['activity-sync'], queryFn: api.syncStatus });
+}
+
 export function useLibrary() {
   return useQuery({ queryKey: ['library'], queryFn: api.library });
 }

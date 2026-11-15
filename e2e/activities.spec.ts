@@ -1,11 +1,16 @@
-import { readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, utimes, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { expect, test } from '@playwright/test';
+import { northboundPoints, recordedGpx } from '../shared/recorded-gpx.fixture';
 
 const RECORDING = 'fixtures/recordings/sur-les-traces-de-voltaire.gpx';
 const TITLE = "Randonnée de l'après-midi à Sur les Traces de Voltaire";
 
+const EXPORTS = path.resolve('.e2e-trips/exports-alltrails');
+
 test.beforeAll(async () => {
   await rm('.e2e-trips/.activities', { recursive: true, force: true });
+  await rm(EXPORTS, { recursive: true, force: true });
 });
 
 test('importer une sortie AllTrails, la retrouver et refuser les doublons', async ({ page }) => {
@@ -64,4 +69,48 @@ test('importer une sortie AllTrails, la retrouver et refuser les doublons', asyn
   await expect(page.getByRole('dialog', { name: TITLE })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByText('2 sorties', { exact: true })).toBeVisible();
+});
+
+test('synchroniser un dossier d’exports et trancher un doublon probable', async ({ page }) => {
+  await mkdir(EXPORTS, { recursive: true });
+  const files: Record<string, string> = {
+    // Déjà importée par le test précédent : doublon exact.
+    'voltaire.gpx': await readFile(RECORDING, 'utf8'),
+    'col.gpx': recordedGpx([northboundPoints(30)], { name: 'Col du Festre' }),
+    'cassé.gpx': '<gpx><trk>',
+  };
+  const past = new Date(Date.now() - 60_000);
+  for (const [name, content] of Object.entries(files)) {
+    await writeFile(path.join(EXPORTS, name), content);
+    await utimes(path.join(EXPORTS, name), past, past);
+  }
+
+  await page.goto('/sorties');
+  const panel = page.getByRole('region', { name: 'Synchronisation' });
+  await panel.getByLabel('Dossier des exports AllTrails').fill('exports');
+  await panel.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(panel.getByRole('alert')).toContainText('chemin complet');
+
+  await panel.getByLabel('Dossier des exports AllTrails').fill(EXPORTS);
+  await panel.getByRole('button', { name: 'Enregistrer' }).click();
+  await panel.getByRole('button', { name: 'Synchroniser maintenant' }).click();
+
+  await expect(panel).toContainText('1 sortie importée, 1 doublon, 1 échec');
+  await expect(panel).toContainText("cassé.gpx : Ce fichier n'est pas un GPX lisible");
+  await expect(page.getByRole('button', { name: /Col du Festre/ })).toBeVisible();
+
+  // Un second passage n'importe rien de plus.
+  await panel.getByRole('button', { name: 'Synchroniser maintenant' }).click();
+  await expect(panel).toContainText('Dernière synchronisation');
+  await expect(panel).not.toContainText('sortie importée');
+
+  // Autre export de la même sortie : en attente, puis importé sur choix explicite.
+  const otherExport = path.join(EXPORTS, 'col-montre.gpx');
+  await writeFile(otherExport, `${files['col.gpx']}\n<!-- montre -->`);
+  await utimes(otherExport, past, past);
+  await panel.getByRole('button', { name: 'Synchroniser maintenant' }).click();
+  await expect(panel).toContainText('Un fichier ressemble à une sortie déjà importée');
+  await panel.getByRole('button', { name: 'Importer quand même' }).click();
+  await expect(panel).not.toContainText('ressemble à une sortie');
+  await expect(page.getByRole('button', { name: /Col du Festre/ })).toHaveCount(2);
 });
