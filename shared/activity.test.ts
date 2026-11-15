@@ -6,6 +6,7 @@ import {
   findDuplicate,
   isProbableDuplicate,
   RECORDED_HYSTERESIS_M,
+  sortActivities,
   type RecordedPoint,
   recordedMetrics,
   type RecordedTrack,
@@ -173,5 +174,27 @@ describe('doublons', () => {
   it('se fie à la géométrie quand une heure manque', () => {
     const untimed = reference.map(({ lat, lng, ele }) => ({ lat, lng, ele }));
     expect(isProbableDuplicate(comparable(untimed), stored(reference, 'b'.repeat(64)))).toBe(true);
+  });
+});
+
+describe('sortActivities', () => {
+  it('met les plus récentes d’abord, et celles sans heure à la fin', () => {
+    const at = (id: string, activityDate: string | null, importedAt: string) => ({
+      id,
+      activityDate,
+      importedAt,
+    });
+    const sorted = sortActivities([
+      at('ancienne', '2026-07-01T06:00:00Z', '2026-11-01T00:00:00.000Z'),
+      at('sans-heure-1', null, '2026-11-02T00:00:00.000Z'),
+      at('récente', '2026-11-14T12:37:58Z', '2026-11-14T00:00:00.000Z'),
+      at('sans-heure-2', null, '2026-11-03T00:00:00.000Z'),
+    ]);
+    expect(sorted.map(({ id }) => id)).toEqual([
+      'récente',
+      'ancienne',
+      'sans-heure-2',
+      'sans-heure-1',
+    ]);
   });
 });

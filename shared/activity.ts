@@ -197,3 +197,16 @@ export function findDuplicate(
   const probable = existing.find((activity) => isProbableDuplicate(draft, activity));
   return probable ? { status: 'probable', activityId: probable.id } : { status: 'none' };
 }
+
+/** Plus récente d'abord ; une sortie sans heure passe après, par date d'import. */
+export function sortActivities<T extends Pick<Activity, 'activityDate' | 'importedAt'>>(
+  activities: T[],
+): T[] {
+  return activities.toSorted((a, b) => {
+    if (a.activityDate && b.activityDate) {
+      return Date.parse(b.activityDate) - Date.parse(a.activityDate);
+    }
+    if (a.activityDate || b.activityDate) return a.activityDate ? -1 : 1;
+    return b.importedAt.localeCompare(a.importedAt);
+  });
+}

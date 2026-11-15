@@ -23,6 +23,9 @@ export function AppHeader() {
           <Button asChild variant="ghost" size="sm">
             <Link to="/randos">Mes randos</Link>
           </Button>
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/sorties">Mes sorties</Link>
+          </Button>
           <Button
             variant="ghost"
             size="icon"

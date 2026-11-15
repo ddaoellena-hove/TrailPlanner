@@ -6,8 +6,7 @@ import type { Hike, Settings } from '../shared/schema';
 
 export class GpxError extends Error {}
 
-/** Taille maximale d'un GPX importé (voyage ou activité). */
-export const MAX_GPX_BYTES = 10 * 1024 * 1024;
+export { MAX_GPX_BYTES } from '../shared/gpx';
 
 type ParsedGpx = Pick<Hike, 'kind' | 'stats' | 'start' | 'end'> & {
   name?: string;

@@ -33,6 +33,19 @@ export function useItinerary(trip: Trip) {
   });
 }
 
+export function useActivities() {
+  return useQuery({ queryKey: ['activities'], queryFn: api.listActivities });
+}
+
+/** La trace d'une sortie ne change jamais : le GPX original n'est pas modifié. */
+export function useActivityTrack(id: string) {
+  return useQuery({
+    queryKey: ['activity-track', id],
+    queryFn: () => api.activityTrack(id),
+    staleTime: Infinity,
+  });
+}
+
 export function useLibrary() {
   return useQuery({ queryKey: ['library'], queryFn: api.library });
 }

@@ -10,7 +10,10 @@ export type ProfilePoint = {
 };
 
 /** Profil d'une rando, ou profil enchaîné de plusieurs (SPEC §7), avec la pente locale. */
-export function buildProfile(hikes: Hike[]): ProfilePoint[] {
+/** Tout tracé qui a un profil : rando prévue ou sortie enregistrée. */
+export type ProfiledTrack = Pick<Hike, 'id'> & { stats: Pick<Hike['stats'], 'profile'> };
+
+export function buildProfile(hikes: ProfiledTrack[]): ProfilePoint[] {
   const points: ProfilePoint[] = [];
   let offsetKm = 0;
   for (const hike of hikes) {
