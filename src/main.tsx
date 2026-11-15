@@ -7,6 +7,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { AppHeader } from '@/components/AppHeader';
 import { TripPage } from '@/pages/TripPage';
 import { LibraryPage } from '@/pages/LibraryPage';
+import { ActivitiesPage } from '@/pages/ActivitiesPage';
 import { TripsPage } from '@/pages/TripsPage';
 import './index.css';
 
@@ -22,6 +23,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/" element={<TripsPage />} />
             <Route path="/voyages/:slug" element={<TripPage />} />
             <Route path="/randos" element={<LibraryPage />} />
+            <Route path="/sorties" element={<ActivitiesPage />} />
           </Routes>
         </BrowserRouter>
         <Toaster position="bottom-right" />

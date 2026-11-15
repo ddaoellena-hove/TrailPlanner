@@ -10,6 +10,26 @@
       ],
       "port": 5175,
       "url": "http://127.0.0.1:5175"
+    },
+    {
+      "name": "trailplanner-sandbox",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "TRIPS_DIR=./.e2e-trips/sandbox",
+        "SETTINGS_FILE=./.e2e-trips/sandbox/settings.json",
+        "WEB_PORT=5185",
+        "API_PORT=5186",
+        "NOTION_TOKEN=",
+        "ORS_API_KEY=",
+        "ANTHROPIC_API_KEY=",
+        "OPENAI_API_KEY=",
+        "OPENCHARGEMAP_API_KEY=",
+        "npm",
+        "run",
+        "dev"
+      ],
+      "port": 5185,
+      "url": "http://127.0.0.1:5185"
     }
   ]
 }

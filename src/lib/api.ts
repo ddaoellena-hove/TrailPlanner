@@ -2,6 +2,10 @@ import { z } from 'zod';
 import type { Proposal } from '../../shared/plan-impact';
 import { ProposalSchema } from '../../shared/plan-impact';
 import {
+  type Activity,
+  type ActivityPreview,
+  ActivityPreviewSchema,
+  ActivitySchema,
   type ChargingSearch,
   ChargingSearchSchema,
   type DayWeather,
@@ -98,6 +102,39 @@ export const api = {
     body.set('alltrailsUrl', fields.alltrailsUrl);
     const response = await request(`/trips/${slug}/gpx`, { method: 'POST', body });
     return HikeSchema.parse(await response.json());
+  },
+
+  async listActivities(): Promise<Activity[]> {
+    return z.array(ActivitySchema).parse(await (await request('/activities')).json());
+  },
+
+  /** Lit et calcule la sortie sans rien enregistrer. */
+  async previewActivity(file: File): Promise<ActivityPreview> {
+    const body = new FormData();
+    body.set('file', file);
+    const response = await request('/activities/preview', { method: 'POST', body });
+    return ActivityPreviewSchema.parse(await response.json());
+  },
+
+  async importActivity(
+    file: File,
+    options: { title: string; confirmProbableDuplicate: boolean },
+  ): Promise<Activity> {
+    const body = new FormData();
+    body.set('file', file);
+    body.set('title', options.title);
+    body.set('confirmProbableDuplicate', String(options.confirmProbableDuplicate));
+    const response = await request('/activities', { method: 'POST', body });
+    return ActivitySchema.parse(await response.json());
+  },
+
+  /** Trace complète, un tracé par segment, en [lng, lat]. */
+  async activityTrack(id: string): Promise<number[][][]> {
+    const response = await request(`/activities/${id}/track`);
+    const feature = z
+      .object({ geometry: z.object({ coordinates: z.array(z.array(z.array(z.number()))) }) })
+      .parse(await response.json());
+    return feature.geometry.coordinates;
   },
 
   async library(): Promise<LibraryHike[]> {

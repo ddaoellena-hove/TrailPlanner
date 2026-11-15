@@ -58,3 +58,30 @@ export function formatDateRange(startDate: string, endDate: string): string {
 export function formatDayCount(count: number): string {
   return count > 1 ? `${count} jours` : '1 jour';
 }
+
+/** Fuseau d'affichage des heures enregistrées, stockées telles qu'écrites dans le GPX (UTC). */
+export const DISPLAY_TIME_ZONE = 'Europe/Paris';
+
+/** « samedi 14 novembre 2026 » */
+export function formatActivityDate(iso: string, timeZone = DISPLAY_TIME_ZONE): string {
+  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'full', timeZone }).format(new Date(iso));
+}
+
+/** « 14 nov. 2026 » */
+export function formatShortDate(iso: string, timeZone = DISPLAY_TIME_ZONE): string {
+  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeZone }).format(new Date(iso));
+}
+
+/** « 13:37 » */
+export function formatTimeOfDay(iso: string, timeZone = DISPLAY_TIME_ZONE): string {
+  return new Intl.DateTimeFormat('fr-FR', { timeStyle: 'short', timeZone }).format(new Date(iso));
+}
+
+export function formatMeters(meters: number): string {
+  return formatKm(meters / 1000);
+}
+
+/** Durée en secondes, arrondie à la minute : « 1 h 25 ». */
+export function formatSeconds(seconds: number): string {
+  return formatDuration(seconds / 60);
+}

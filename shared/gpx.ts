@@ -3,6 +3,9 @@ import type { Hike, HikeStats, LatLng, Settings, Trip } from './schema';
 
 export type TrackPoint = LatLng & { altM: number | null };
 
+/** Taille maximale d'un GPX importé (voyage ou activité), vérifiée par le serveur et le front. */
+export const MAX_GPX_BYTES = 10 * 1024 * 1024;
+
 /** Fenêtre de la moyenne glissante appliquée aux altitudes, en mètres de distance. */
 export const SMOOTHING_WINDOW_M = 50;
 /** Seuil d'hystérésis du D+/D− (SPEC §5.1). */

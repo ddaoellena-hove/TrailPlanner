@@ -51,6 +51,7 @@ L'e2e écrit dans `.e2e-trips/` et neutralise `NOTION_TOKEN`, `ORS_API_KEY`, `OP
 - **Voyages :** création, duplication, corbeille dans `trips/.trash`. Nom, dates, chien, voiture électrique, départ et arrivée se modifient directement dans la page.
 - **Randos :** import de plusieurs GPX, fiche complète, remplacement du tracé sans perdre le planning. Le GPX original n'est jamais modifié.
 - **Mes randos :** bibliothèque commune aux voyages, alimentée par les imports : recherche, filtres, carte, notes, sorties réalisées, comparaison du prévu au réel et ajustement du rythme en un clic. Une rando s'ajoute à un voyage par copie.
+- **Mes sorties :** historique des sorties enregistrées avec AllTrails, distinct des randos prévues : import d'un GPX avec aperçu et confirmation, doublons refusés ou soumis à un choix, liste, carte, fiche avec trace complète et profil. Heures affichées à l'heure de Paris.
 - **Planning :** étapes glissées dans un jour ou entre jours, trajets calculés dans la timeline, nuits, replis, notes, totaux et charge par jour. Annuler/rétablir sur 50 niveaux, `Ctrl/Cmd+S`.
 - **Étapes :** avec trail, ou de séjour avec autocomplétion d'adresse. Chacune a un départ, par défaut le séjour précédent, et un séjour avec lien.
 - **Carte :** fond Plan IGN, photos aériennes ou OpenStreetMap, atténuable, couches de terrain à superposer (relief, pentes, courbes, eau, routes, traces hivernales), éléments du voyage masquables, tracés colorés par jour, filtre par jour, trajet du trail à l'hôtel en violet, profil altimétrique synchronisé, ajout d'un lieu au clic droit.
@@ -81,7 +82,7 @@ trips/      données utilisateur
 | Routes | `server/app.ts` |
 | Trajets | `shared/itinerary.ts`, `server/routing.ts` |
 | Bibliothèque | `shared/library.ts`, `server/library-store.ts`, `src/pages/LibraryPage.tsx` |
-| Activités enregistrées | `shared/activity.ts`, `server/activity-store.ts`, `server/gpx.ts` (`parseRecordedGpx`) |
+| Activités enregistrées | `shared/activity.ts`, `server/activity-store.ts`, `server/gpx.ts` (`parseRecordedGpx`), `src/pages/ActivitiesPage.tsx` |
 | Horaires et soleil | `shared/schedule.ts`, `shared/sun.ts`, `shared/totals.ts` |
 | Alertes | `shared/alerts.ts` |
 | Carnet et export | `shared/carnet.ts`, `server/notion.ts` |
