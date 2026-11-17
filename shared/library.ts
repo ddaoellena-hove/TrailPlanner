@@ -1,4 +1,20 @@
-import type { LibraryHike, Settings } from './schema';
+import type { Activity, LibraryHike, Settings } from './schema';
+
+/** Sorties enregistrées liées à cette rando prévue. */
+export function linkedActivities<T extends Pick<Activity, 'linkedRouteId'>>(
+  hike: Pick<LibraryHike, 'id'>,
+  activities: T[],
+): T[] {
+  return activities.filter(({ linkedRouteId }) => linkedRouteId === hike.id);
+}
+
+/** Fois où la rando a été faite : sorties saisies à la main et sorties enregistrées liées. */
+export function timesDone(
+  hike: Pick<LibraryHike, 'id' | 'outings'>,
+  activities: Pick<Activity, 'linkedRouteId'>[],
+): number {
+  return hike.outings.length + linkedActivities(hike, activities).length;
+}
 
 export type LibraryFilters = {
   query: string;
@@ -27,10 +43,15 @@ function normalize(text: string): string {
     .toLowerCase();
 }
 
-export function filterLibraryHikes(hikes: LibraryHike[], filters: LibraryFilters): LibraryHike[] {
+export function filterLibraryHikes(
+  hikes: LibraryHike[],
+  filters: LibraryFilters,
+  activities: Pick<Activity, 'linkedRouteId'>[] = [],
+): LibraryHike[] {
   const query = normalize(filters.query.trim());
-  return hikes.filter(({ name, tags, stats, dogPolicy, outings, rating }) => {
-    const done = outings.length > 0;
+  return hikes.filter((hike) => {
+    const { name, tags, stats, dogPolicy, rating } = hike;
+    const done = timesDone(hike, activities) > 0;
     return (
       normalize([name, ...(tags ?? [])].join(' ')).includes(query) &&
       (filters.status === 'all' || done === (filters.status === 'done')) &&
@@ -57,15 +78,26 @@ function median(values: number[]): number {
     : (sorted[middle - 1]! + sorted[middle]!) / 2;
 }
 
-/** La médiane évite qu'une sortie très lente, ou une durée mal saisie, fausse le rythme. */
-export function paceComparison(hikes: LibraryHike[]): PaceComparison | null {
-  const ratios = hikes.flatMap(({ outings, stats }) =>
-    stats.estimatedDurationMin > 0
-      ? outings.flatMap(({ durationMin }) =>
-          durationMin === undefined ? [] : [durationMin / stats.estimatedDurationMin],
-        )
-      : [],
-  );
+/**
+ * La médiane évite qu'une sortie très lente, ou une durée mal saisie, fausse le rythme.
+ * Une sortie enregistrée liée compte avec sa durée totale, pauses comprises, comme une
+ * durée saisie à la main.
+ */
+export function paceComparison(
+  hikes: LibraryHike[],
+  activities: Pick<Activity, 'linkedRouteId' | 'durationSeconds'>[] = [],
+): PaceComparison | null {
+  const ratios = hikes.flatMap((hike) => {
+    const estimated = hike.stats.estimatedDurationMin;
+    if (estimated <= 0) return [];
+    const durations = [
+      ...hike.outings.flatMap(({ durationMin }) => (durationMin === undefined ? [] : [durationMin])),
+      ...linkedActivities(hike, activities).flatMap(({ durationSeconds }) =>
+        durationSeconds === null ? [] : [durationSeconds / 60],
+      ),
+    ];
+    return durations.map((minutes) => minutes / estimated);
+  });
   return ratios.length > 0 ? { ratio: median(ratios), outingCount: ratios.length } : null;
 }
 

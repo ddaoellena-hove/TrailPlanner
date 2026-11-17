@@ -51,7 +51,7 @@ L'e2e écrit dans `.e2e-trips/` et neutralise `NOTION_TOKEN`, `ORS_API_KEY`, `OP
 - **Voyages :** création, duplication, corbeille dans `trips/.trash`. Nom, dates, chien, voiture électrique, départ et arrivée se modifient directement dans la page.
 - **Randos :** import de plusieurs GPX, fiche complète, remplacement du tracé sans perdre le planning. Le GPX original n'est jamais modifié.
 - **Mes randos :** bibliothèque commune aux voyages, alimentée par les imports : recherche, filtres, carte, notes, sorties réalisées, comparaison du prévu au réel et ajustement du rythme en un clic. Une rando s'ajoute à un voyage par copie.
-- **Mes sorties :** historique des sorties enregistrées avec AllTrails, distinct des randos prévues : import d'un GPX avec aperçu et confirmation, doublons refusés ou soumis à un choix, liste, carte, fiche avec trace complète et profil. Heures affichées à l'heure de Paris. Synchronisation depuis un dossier d'exports GPX : bouton « Synchroniser maintenant », synchronisation automatique toutes les 5 minutes (désactivée par défaut), compte rendu, choix sur les doublons probables.
+- **Mes sorties :** historique des sorties enregistrées avec AllTrails, distinct des randos prévues : import d'un GPX avec aperçu et confirmation, doublons refusés ou soumis à un choix, liste, carte, fiche avec trace complète et profil. Heures affichées à l'heure de Paris. Synchronisation depuis un dossier d'exports GPX : bouton « Synchroniser maintenant », synchronisation automatique toutes les 5 minutes (désactivée par défaut), compte rendu, choix sur les doublons probables. Lien manuel vers une rando de « Mes randos » (propositions d'après la trace, jamais de lien automatique), tableau prévu / réalisé et carte prévue en pointillé ; une rando liée compte comme faite et entre dans la comparaison du rythme.
 - **Planning :** étapes glissées dans un jour ou entre jours, trajets calculés dans la timeline, nuits, replis, notes, totaux et charge par jour. Annuler/rétablir sur 50 niveaux, `Ctrl/Cmd+S`.
 - **Étapes :** avec trail, ou de séjour avec autocomplétion d'adresse. Chacune a un départ, par défaut le séjour précédent, et un séjour avec lien.
 - **Carte :** fond Plan IGN, photos aériennes ou OpenStreetMap, atténuable, couches de terrain à superposer (relief, pentes, courbes, eau, routes, traces hivernales), éléments du voyage masquables, tracés colorés par jour, filtre par jour, trajet du trail à l'hôtel en violet, profil altimétrique synchronisé, ajout d'un lieu au clic droit.
@@ -101,6 +101,8 @@ Les activités enregistrées (intégration AllTrails, en cours) vivent dans `tri
 | POST | `/api/activities/preview` | multipart `file` : lit et calcule, n'écrit rien ; renvoie `{ draft, duplicate }` |
 | POST | `/api/activities` | multipart `file`, `title?`, `confirmProbableDuplicate?` : importe ; 409 sur doublon |
 | GET | `/api/activities/:id` | une activité |
+| PUT | `/api/activities/:id/link` | `{ routeId: uuid \| null }` : lie la sortie à une rando de la bibliothèque, ou retire le lien |
+| GET | `/api/activities/:id/route-suggestions` | randos prévues dont la trace recouvre celle de la sortie (≥ 70 % dans les deux sens) ; une proposition, jamais un lien |
 | GET | `/api/activities/:id/track` | trace complète en GeoJSON `MultiLineString`, un tracé par segment |
 | GET | `/api/activities/sync` | dossier surveillé, dernier passage, fichiers en attente d'un choix |
 | POST | `/api/activities/sync` | importe les nouveaux GPX du dossier ; renvoie importés, doublons, en attente, échecs |

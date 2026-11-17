@@ -8,9 +8,12 @@ const TITLE = "Randonnée de l'après-midi à Sur les Traces de Voltaire";
 
 const EXPORTS = path.resolve('.e2e-trips/exports-alltrails');
 
+// Les tests s'enchaînent sur les mêmes données : un échec arrête les suivants.
+test.describe.configure({ mode: 'serial' });
+
 test.beforeAll(async () => {
-  await rm('.e2e-trips/.activities', { recursive: true, force: true });
-  await rm(EXPORTS, { recursive: true, force: true });
+  // Données de départ vides, comme pour les voyages : sorties, bibliothèque, réglages et dossier.
+  await rm('.e2e-trips', { recursive: true, force: true });
 });
 
 test('importer une sortie AllTrails, la retrouver et refuser les doublons', async ({ page }) => {
@@ -113,4 +116,53 @@ test('synchroniser un dossier d’exports et trancher un doublon probable', asyn
   await panel.getByRole('button', { name: 'Importer quand même' }).click();
   await expect(panel).not.toContainText('ressemble à une sortie');
   await expect(page.getByRole('button', { name: /Col du Festre/ })).toHaveCount(2);
+});
+
+test('lier une sortie à la rando prévue qu’elle a suivie', async ({ page }) => {
+  // La rando prévue entre dans la bibliothèque par l'import d'un GPX dans un voyage.
+  const trip = await (
+    await page.request.post('/api/trips', {
+      data: { name: 'Normandie', startDate: '2026-11-14', endDate: '2026-11-15', withDog: false },
+    })
+  ).json();
+  const upload = await page.request.post(`/api/trips/${trip.slug}/gpx`, {
+    multipart: {
+      file: {
+        name: 'voltaire-itineraire.gpx',
+        mimeType: 'application/gpx+xml',
+        buffer: await readFile(RECORDING),
+      },
+      name: 'Sur les traces de Voltaire',
+    },
+  });
+  expect(upload.status()).toBe(201);
+
+  await page.goto('/sorties');
+  await page.getByRole('button', { name: /Voltaire avec Rémi/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'Voltaire avec Rémi' });
+  const section = sheet.getByRole('region', { name: 'Rando prévue' });
+  await expect(section).toContainText('Correspond probablement à « Sur les traces de Voltaire »');
+  await section.getByRole('button', { name: 'Lier', exact: true }).first().click();
+
+  await expect(section).toContainText('Rando prévue : Sur les traces de Voltaire');
+  await expect(section.getByRole('columnheader', { name: 'Prévu' })).toBeVisible();
+  await expect(section.getByRole('columnheader', { name: 'Réalisé' })).toBeVisible();
+
+  // La rando prévue compte comme faite et renvoie vers la sortie.
+  await page.goto('/randos');
+  const card = page.getByRole('button', { name: /Sur les traces de Voltaire/ });
+  await expect(card).toContainText('Faite 1 fois');
+  await card.click();
+  await page.getByRole('link', { name: /14 nov\. 2026/ }).click();
+  await expect(page).toHaveURL(/\/sorties\?sortie=/);
+  await expect(page.getByRole('dialog', { name: 'Voltaire avec Rémi' })).toBeVisible();
+
+  // Retirer le lien la fait redevenir « jamais faite ».
+  await page
+    .getByRole('dialog', { name: 'Voltaire avec Rémi' })
+    .getByRole('button', { name: 'Retirer le lien' })
+    .click();
+  await expect(page.getByRole('region', { name: 'Rando prévue' })).toContainText(
+    'Correspond probablement',
+  );
 });

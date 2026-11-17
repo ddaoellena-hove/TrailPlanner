@@ -47,6 +47,14 @@ export function useActivityTrack(id: string) {
 }
 
 /** Rafraîchi toutes les 30 s quand la synchronisation automatique est active. */
+/** Propositions de randos prévues ; recalculées quand le lien change. */
+export function useRouteSuggestions(id: string, linkedRouteId: string | null) {
+  return useQuery({
+    queryKey: ['route-suggestions', id, linkedRouteId],
+    queryFn: () => api.routeSuggestions(id),
+  });
+}
+
 export function useSyncStatus() {
   return useQuery({
     queryKey: ['activity-sync'],

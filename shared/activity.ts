@@ -7,7 +7,7 @@ import {
   smoothAltitudes,
   type TrackPoint,
 } from './gpx';
-import type { Activity, ActivityDraft, ActivitySource, DuplicateCheck, HikeStats } from './schema';
+import type { Activity, ActivityDraft, ActivitySource, LibraryHike, DuplicateCheck, HikeStats } from './schema';
 
 /** Point d'une trace enregistrée ; `time` est la chaîne du fichier, null si absente ou illisible. */
 export type RecordedPoint = TrackPoint & { time: string | null };
@@ -163,8 +163,10 @@ function similarDistance(a: Comparable, b: Comparable): boolean {
   return Math.abs(a.distanceMeters - b.distanceMeters) / longest <= DUPLICATE_MAX_DISTANCE_GAP;
 }
 
+type Profiled = Pick<ActivityDraft, 'profile'>;
+
 /** Part des points échantillonnés de `a` à moins de 50 m de la ligne de `b`. */
-export function closeShare(a: Comparable, b: Comparable): number {
+export function closeShare(a: Profiled, b: Profiled): number {
   if (a.profile.length === 0 || b.profile.length < 2) return 0;
   const line = lineString(b.profile.map(({ lat, lng }) => [lng, lat]));
   const step = Math.max(1, Math.floor(a.profile.length / DUPLICATE_SAMPLES));
@@ -209,4 +211,29 @@ export function sortActivities<T extends Pick<Activity, 'activityDate' | 'import
     if (a.activityDate || b.activityDate) return a.activityDate ? -1 : 1;
     return b.importedAt.localeCompare(a.importedAt);
   });
+}
+
+/** Part minimale de chaque trace proche de l'autre pour proposer un itinéraire. */
+export const ROUTE_MATCH_MIN_SHARE = 0.7;
+const MAX_ROUTE_SUGGESTIONS = 3;
+
+export type RouteSuggestion = { routeId: string; share: number };
+
+/**
+ * Itinéraires prévus que la sortie semble avoir suivis : chaque trace passe en grande partie
+ * près de l'autre. Ce n'est qu'une proposition : le lien n'est créé que sur un clic.
+ */
+export function suggestRoutes(
+  activity: Pick<Activity, 'profile' | 'linkedRouteId'>,
+  routes: Pick<LibraryHike, 'id' | 'stats'>[],
+): RouteSuggestion[] {
+  return routes
+    .filter(({ id }) => id !== activity.linkedRouteId)
+    .map(({ id, stats }) => {
+      const route = { profile: stats.profile };
+      return { routeId: id, share: Math.min(closeShare(activity, route), closeShare(route, activity)) };
+    })
+    .filter(({ share }) => share >= ROUTE_MATCH_MIN_SHARE)
+    .toSorted((a, b) => b.share - a.share)
+    .slice(0, MAX_ROUTE_SUGGESTIONS);
 }
