@@ -53,7 +53,8 @@ export function draftActivity(bytes: Buffer, fileName: string): ActivityDraft {
 
 /**
  * Activités enregistrées : `<trips>/.activities/activities.json` et `gpx/<id>.gpx`.
- * Un import ne modifie jamais une activité existante.
+ * Un import ne modifie jamais une activité existante ; seul son lien vers une rando prévue
+ * se change, à la main.
  */
 export class ActivityStore {
   private readonly root: string;
@@ -100,6 +101,25 @@ export class ActivityStore {
   async readGpx(id: string): Promise<string> {
     const activity = await this.get(id);
     return readFile(path.join(this.root, activity.originalFile), 'utf8');
+  }
+
+  /**
+   * Lie la sortie à une rando prévue, ou retire le lien (`null`). Seul `linkedRouteId`
+   * change : mesures, trace et fichier original restent intacts.
+   */
+  setLink(id: string, routeId: string | null): Promise<Activity> {
+    return this.exclusive(async () => {
+      const current = await this.load();
+      const activity = current.activities.find((candidate) => candidate.id === id);
+      if (!activity) throw new ActivityNotFoundError(id);
+      const linked: Activity = { ...activity, linkedRouteId: routeId };
+      const next = ActivityStoreSchema.parse({
+        ...current,
+        activities: current.activities.map((candidate) => (candidate.id === id ? linked : candidate)),
+      });
+      await this.writeIndex(`${JSON.stringify(next, null, 2)}\n`);
+      return linked;
+    });
   }
 
   async preview(bytes: Buffer, fileName: string): Promise<ActivityPreview> {

@@ -1,4 +1,5 @@
-import { Moon, Mountain, Settings, Sun } from 'lucide-react';
+import { Moon, Settings, Sun } from 'lucide-react';
+import { Logo } from '@/components/Logo';
 import { useTheme } from 'next-themes';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -16,7 +17,7 @@ export function AppHeader() {
     <header className="border-b">
       <div className="mx-auto flex h-14 max-w-[1600px] items-center justify-between px-6">
         <Link to="/" className="flex items-center gap-2 font-semibold">
-          <Mountain className="size-5 text-primary" aria-hidden />
+          <Logo className="h-4.5 w-6 text-primary" />
           TrailPlanner
         </Link>
         <div className="flex items-center gap-1">

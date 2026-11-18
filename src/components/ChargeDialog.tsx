@@ -168,7 +168,7 @@ export function ChargeDialog({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-        <form onSubmit={submit} className="grid gap-4">
+        <form onSubmit={submit} className="grid min-w-0 grid-cols-1 gap-4">
           <DialogHeader>
             <DialogTitle>Ajouter une recharge</DialogTitle>
             <DialogDescription>

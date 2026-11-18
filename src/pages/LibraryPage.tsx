@@ -10,8 +10,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useLibrary } from '@/lib/hooks';
-import { filterLibraryHikes, type LibraryFilters, NO_FILTERS } from '../../shared/library';
+import { useActivities, useLibrary } from '@/lib/hooks';
+import {
+  filterLibraryHikes,
+  type LibraryFilters,
+  NO_FILTERS,
+  timesDone,
+} from '../../shared/library';
 
 const STATUS_OPTIONS: Record<LibraryFilters['status'], string> = {
   all: 'Toutes',
@@ -24,10 +29,15 @@ const toLimit = (value: string) => (value === '' ? null : Number(value));
 
 export function LibraryPage() {
   const library = useLibrary();
+  const activitiesQuery = useActivities();
+  const activities = useMemo(() => activitiesQuery.data ?? [], [activitiesQuery.data]);
   const [filters, setFilters] = useState(NO_FILTERS);
   const [openId, setOpenId] = useState<string | null>(null);
   const hikes = useMemo(() => library.data ?? [], [library.data]);
-  const shown = useMemo(() => filterLibraryHikes(hikes, filters), [hikes, filters]);
+  const shown = useMemo(
+    () => filterLibraryHikes(hikes, filters, activities),
+    [hikes, filters, activities],
+  );
   const open = hikes.find(({ id }) => id === openId);
   const update = (changes: Partial<LibraryFilters>) =>
     setFilters((current) => ({ ...current, ...changes }));
@@ -50,7 +60,7 @@ export function LibraryPage() {
 
       {hikes.length > 0 && (
         <>
-          <PaceCard hikes={hikes} />
+          <PaceCard hikes={hikes} activities={activities} />
           <div className="flex flex-wrap items-end gap-3">
             <div className="grid w-56 gap-1">
               <Label htmlFor="library-search">Rechercher</Label>
@@ -128,9 +138,9 @@ export function LibraryPage() {
                       </span>
                       <span className="flex flex-wrap items-center gap-1.5">
                         <HikeBadges hike={hike} />
-                        <Badge variant={hike.outings.length > 0 ? 'secondary' : 'outline'}>
-                          {hike.outings.length > 0
-                            ? `Faite ${hike.outings.length} fois`
+                        <Badge variant={timesDone(hike, activities) > 0 ? 'secondary' : 'outline'}>
+                          {timesDone(hike, activities) > 0
+                            ? `Faite ${timesDone(hike, activities)} fois`
                             : 'Jamais faite'}
                         </Badge>
                       </span>

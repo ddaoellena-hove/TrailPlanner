@@ -1,6 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { filterLibraryHikes, NO_FILTERS, paceComparison, suggestPace } from './library';
+import {
+  filterLibraryHikes,
+  linkedActivities,
+  NO_FILTERS,
+  paceComparison,
+  suggestPace,
+  timesDone,
+} from './library';
 import { DEFAULT_SETTINGS, type LibraryHike, type Outing } from './schema';
 
 const { pace } = DEFAULT_SETTINGS;
@@ -92,5 +99,40 @@ describe('suggestPace', () => {
       ...pace,
       breakFactor: 1.08,
     });
+  });
+});
+
+describe('sorties enregistrées liées', () => {
+  const route = hike({ name: 'Col' });
+  const other = hike({ name: 'Lac' });
+  const recorded = (linkedRouteId: string | null, durationSeconds: number | null) => ({
+    linkedRouteId,
+    durationSeconds,
+  });
+
+  it('compte une sortie liée comme une fois faite', () => {
+    const activities = [recorded(route.id, 3600), recorded(null, 3600)];
+    expect(linkedActivities(route, activities)).toHaveLength(1);
+    expect(timesDone({ ...route, outings: [outing(200)] }, activities)).toBe(2);
+    expect(timesDone(other, activities)).toBe(0);
+  });
+
+  it('range une rando liée parmi les déjà faites', () => {
+    const done = filterLibraryHikes([route, other], { ...NO_FILTERS, status: 'done' }, [
+      recorded(route.id, null),
+    ]);
+    expect(done.map(({ name }) => name)).toEqual(['Col']);
+  });
+
+  it('compare le rythme avec la durée des sorties liées, sauf durée inconnue', () => {
+    // Estimée 300 min : 240 min réelles → 0,8 ; la sortie sans durée est ignorée.
+    const comparison = paceComparison(
+      [route],
+      [recorded(route.id, 240 * 60), recorded(route.id, null), recorded(null, 60)],
+    );
+    expect(comparison).toEqual({ ratio: 0.8, outingCount: 1 });
+    expect(
+      paceComparison([{ ...route, outings: [outing(330)] }], [recorded(route.id, 270 * 60)]),
+    ).toEqual({ ratio: 1, outingCount: 2 });
   });
 });

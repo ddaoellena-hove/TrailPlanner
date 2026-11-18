@@ -28,6 +28,7 @@ import { geocode } from './geocode';
 import { ActivityNotFoundError, ActivityStore, DuplicateActivityError } from './activity-store';
 import { ConnectorError, FolderConnector } from './activity-connector';
 import { ActivitySync, SyncError } from './activity-sync';
+import { suggestRoutes } from '../shared/activity';
 import { AutoSync } from './auto-sync';
 import { GpxError, MAX_GPX_BYTES, parseGpx, parseRecordedGpx } from './gpx';
 import { MapLinkError, resolveMapLink } from './map-link';
@@ -264,6 +265,24 @@ export function createApp({
     });
     return c.json(activity, 201);
   });
+
+  /** Lien manuel vers une rando prévue de la bibliothèque, ou `null` pour le retirer. */
+  app.put('/api/activities/:id/link', async (c) => {
+    const body = z
+      .object({ routeId: z.uuid().nullable() })
+      .safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: 'Lien invalide' }, 400);
+    const { routeId } = body.data;
+    if (routeId !== null && !(await library.list()).some(({ id }) => id === routeId)) {
+      return c.json({ error: 'Rando prévue introuvable dans la bibliothèque' }, 400);
+    }
+    return c.json(await activities.setLink(c.req.param('id'), routeId));
+  });
+
+  /** Randos prévues que la sortie semble avoir suivies. Une proposition, jamais un lien. */
+  app.get('/api/activities/:id/route-suggestions', async (c) =>
+    c.json(suggestRoutes(await activities.get(c.req.param('id')), await library.list())),
+  );
 
   // L'id ne sert qu'à chercher dans l'index, jamais à construire un chemin disque.
   app.get('/api/activities/:id', async (c) => c.json(await activities.get(c.req.param('id'))));

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ActivityStats, SourceBadge } from '@/components/ActivityStats';
 import { ProfileChart } from '@/components/ProfileChart';
+import { RouteLinkSection } from '@/components/RouteLinkSection';
 import { TrackMap } from '@/components/TrackMap';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -10,7 +11,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { useActivityTrack } from '@/lib/hooks';
+import { useActivityTrack, useLibrary } from '@/lib/hooks';
 import { formatActivityDate, formatShortDate, formatTimeOfDay } from '../../shared/format';
 import { buildProfile } from '../../shared/profile';
 import type { Activity } from '../../shared/schema';
@@ -24,6 +25,16 @@ function timeRange({ activityDate, endedAt }: Activity): string {
 /** Fiche d'une sortie : mesures, trace complète sur la carte et profil synchronisé. */
 export function ActivitySheet({ activity, onClose }: { activity: Activity; onClose: () => void }) {
   const track = useActivityTrack(activity.id);
+  const library = useLibrary();
+  const routes = useMemo(() => library.data ?? [], [library.data]);
+  const linkedRoute = routes.find(({ id }) => id === activity.linkedRouteId);
+  const planned = useMemo(
+    () =>
+      linkedRoute
+        ? [{ id: linkedRoute.id, lines: [linkedRoute.stats.profile.map(({ lng, lat }) => [lng, lat])] }]
+        : [],
+    [linkedRoute],
+  );
   const [cursor, setCursor] = useState<number | null>(null);
   const points = useMemo(
     () => buildProfile([{ id: activity.id, stats: { profile: activity.profile } }]),
@@ -53,7 +64,11 @@ export function ActivitySheet({ activity, onClose }: { activity: Activity; onClo
               </p>
             )}
             {track.data && (
-              <TrackMap tracks={[{ id: activity.id, lines: track.data }]} cursor={cursorPoint} />
+              <TrackMap
+                tracks={[{ id: activity.id, lines: track.data }]}
+                planned={planned}
+                cursor={cursorPoint}
+              />
             )}
           </div>
 
@@ -64,6 +79,8 @@ export function ActivitySheet({ activity, onClose }: { activity: Activity; onClo
           )}
 
           <ActivityStats activity={activity} />
+
+          <RouteLinkSection activity={activity} routes={routes} />
 
           <p className="text-xs text-muted-foreground">
             Importée le {formatShortDate(activity.importedAt)} depuis {activity.originalFileName},{' '}

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useSaveSettings, useSettings } from '@/lib/hooks';
 import { MIN_OUTINGS_FOR_PACE, paceComparison, suggestPace } from '../../shared/library';
-import type { LibraryHike } from '../../shared/schema';
+import type { Activity, LibraryHike } from '../../shared/schema';
 
 function comparisonText(ratio: number, outingCount: number): string {
   const gap = Math.round(Math.abs(ratio - 1) * 100);
@@ -14,11 +14,11 @@ function comparisonText(ratio: number, outingCount: number): string {
 }
 
 /** Prévu contre réel. Le rythme ne change que sur un clic. */
-export function PaceCard({ hikes }: { hikes: LibraryHike[] }) {
+export function PaceCard({ hikes, activities }: { hikes: LibraryHike[]; activities: Activity[] }) {
   const queryClient = useQueryClient();
   const settings = useSettings();
   const saveSettings = useSaveSettings();
-  const comparison = paceComparison(hikes);
+  const comparison = paceComparison(hikes, activities);
   const pace = suggestPace(settings.pace, comparison);
   const count = comparison?.outingCount ?? 0;
 

@@ -113,4 +113,15 @@ describe('ActivityStore', () => {
     expect(results.map(({ status }) => status).toSorted()).toEqual(['fulfilled', 'rejected']);
     expect(await store.list()).toHaveLength(1);
   });
+
+  it('lie et délie une rando prévue sans toucher au reste de la sortie', async () => {
+    const activity = await store.add(sortie, 'col.gpx');
+    const routeId = crypto.randomUUID();
+    const linked = await store.setLink(activity.id, routeId);
+    expect(linked).toEqual({ ...activity, linkedRouteId: routeId });
+    expect(await new ActivityStore(dir).get(activity.id)).toEqual(linked);
+    expect(await store.setLink(activity.id, null)).toEqual(activity);
+    expect(await readFile(path.join(root(), activity.originalFile))).toEqual(sortie);
+    await expect(store.setLink(crypto.randomUUID(), null)).rejects.toThrow();
+  });
 });

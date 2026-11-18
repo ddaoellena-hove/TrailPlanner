@@ -143,6 +143,23 @@ export const api = {
     return feature.geometry.coordinates;
   },
 
+  /** Lie une sortie à une rando prévue, ou retire le lien avec `null`. */
+  async linkActivity(id: string, routeId: string | null): Promise<Activity> {
+    const response = await request(`/activities/${id}/link`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ routeId }),
+    });
+    return ActivitySchema.parse(await response.json());
+  },
+
+  async routeSuggestions(id: string): Promise<{ routeId: string; share: number }[]> {
+    const response = await request(`/activities/${id}/route-suggestions`);
+    return z
+      .array(z.object({ routeId: z.string(), share: z.number() }))
+      .parse(await response.json());
+  },
+
   async syncStatus(): Promise<SyncStatus> {
     return SyncStatusSchema.parse(await (await request('/activities/sync')).json());
   },

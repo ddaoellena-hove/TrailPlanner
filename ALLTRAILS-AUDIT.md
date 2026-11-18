@@ -149,3 +149,14 @@ Decided by David: Notion is no longer used to document trails; Phase 5 targets t
 
 ### Second real recording (2026-11-15)
 "Vallée du Crevon" (Ry – Épinay – Saint-Denis-le-Thiboult), AllTrails export, 1,963 points, one segment. TrailPlanner 7.64 km / +162 m / 1 h 36 against AllTrails 7.65 km / 169 m / 1 h 36 (D+ −4 %). Elevation gain by threshold: 5 m → 157 m, 3 m → 166 m, 2 m → 162 m. Across both recordings, 2 m is the only threshold within ±5 % of AllTrails; kept. Added to `fixtures/recordings/` at David's request.
+
+## 8. Phase 4 — delivered (2026-11-17, branch `feat/activities-route-links`)
+
+As approved in D2/D3:
+- **Manual link** from a recorded activity to a library route (`PUT /api/activities/:id/link`, `linkedRouteId`), and unlink. Only `linkedRouteId` changes; metrics, track and original file stay untouched. An unknown route is refused.
+- **Suggestions, never automatic links** (spec §3.3): routes whose trace overlaps the activity's by ≥ 70 % in both directions (`suggestRoutes`, same geometry test as duplicate detection), shown with a "Lier" button.
+- **Planned vs recorded kept distinct**: detail sheet shows a Planned / Recorded table (planned duration is the DIN estimate, recorded is elapsed) and the map draws the planned route dashed (green) under the recorded track (solid, brown).
+- **D3**: a linked activity counts as "done" in "Mes randos" (filter and "Faite N fois") and its elapsed duration feeds the pace comparison. Manual outings unchanged, nothing migrated.
+- The route sheet lists its linked recordings, each opening `/sorties?sortie=<id>`.
+- Fix found while checking: a map created in an opening panel was framed for the wrong size; it now re-frames on load and resize until the user moves it.
+- Note: a planned route and its recording can show different D+ for the same ground, because routes use the 5 m threshold (DEM elevations) and recordings 2 m (GPS elevations).

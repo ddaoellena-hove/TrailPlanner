@@ -7,6 +7,7 @@ import {
   isProbableDuplicate,
   RECORDED_HYSTERESIS_M,
   sortActivities,
+  suggestRoutes,
   type RecordedPoint,
   recordedMetrics,
   type RecordedTrack,
@@ -196,5 +197,38 @@ describe('sortActivities', () => {
       'sans-heure-2',
       'sans-heure-1',
     ]);
+  });
+});
+
+describe('suggestRoutes', () => {
+  const recordedTrack = comparable(northboundPoints(40));
+  const route = (id: string, points: ReturnType<typeof northboundPoints>) => ({
+    id,
+    stats: { profile: comparable(points).profile } as never,
+  });
+
+  it('propose la rando prévue que la sortie a suivie, pas une voisine', () => {
+    const suggestions = suggestRoutes({ ...recordedTrack, linkedRouteId: null }, [
+      route('suivie', northboundPoints(40, { lng: 6.0002 })),
+      route('voisine', northboundPoints(40, { lng: 6.005 })),
+    ]);
+    expect(suggestions.map(({ routeId }) => routeId)).toEqual(['suivie']);
+    expect(suggestions[0]!.share).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it('ne propose pas une rando dont la sortie n’a fait qu’un bout', () => {
+    // Itinéraire trois fois plus long : la sortie n'en couvre qu'un tiers.
+    const suggestions = suggestRoutes({ ...recordedTrack, linkedRouteId: null }, [
+      route('longue', northboundPoints(120)),
+    ]);
+    expect(suggestions).toEqual([]);
+  });
+
+  it('ne repropose pas la rando déjà liée', () => {
+    expect(
+      suggestRoutes({ ...recordedTrack, linkedRouteId: 'suivie' }, [
+        route('suivie', northboundPoints(40)),
+      ]),
+    ).toEqual([]);
   });
 });

@@ -3,6 +3,7 @@ import { ExternalLink } from 'lucide-react';
 import { type FormEvent, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { HikeSelects } from '@/components/HikeSelects';
+import { LinkedActivities } from '@/components/LinkedActivities';
 import { OutingsSection } from '@/components/OutingsSection';
 import { ProfileChart } from '@/components/ProfileChart';
 import { RatingStars } from '@/components/RatingStars';
@@ -93,6 +94,8 @@ export function LibraryHikeSheet({ hike, onClose }: { hike: LibraryHike; onClose
               <ProfileChart points={points} cursorIndex={cursor} onCursorChange={setCursor} />
             </div>
           )}
+
+          <LinkedActivities hike={hike} />
 
           <OutingsSection hike={hike} defaultDate={new Date().toISOString().slice(0, 10)} />
 

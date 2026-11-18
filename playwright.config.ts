@@ -6,6 +6,9 @@ const API_PORT = '5184';
 
 export default defineConfig({
   testDir: './e2e',
+  // Un seul serveur et un seul dossier `.e2e-trips`, vidé au début de chaque fichier :
+  // les fichiers ne doivent pas tourner en parallèle.
+  workers: 1,
   use: { baseURL: `http://127.0.0.1:${WEB_PORT}`, screenshot: 'only-on-failure' },
   webServer: {
     command: 'npm run dev',

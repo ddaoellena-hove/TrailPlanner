@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Upload } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { ActivityBadges, SourceBadge } from '@/components/ActivityStats';
 import { ActivityImportDialog } from '@/components/ActivityImportDialog';
@@ -19,7 +20,9 @@ export function ActivitiesPage() {
   const queryClient = useQueryClient();
   const activities = useActivities();
   const [importing, setImporting] = useState(false);
-  const [openId, setOpenId] = useState<string | null>(null);
+  // « ?sortie=<id> » ouvre une fiche : lien depuis la rando prévue liée.
+  const [searchParams] = useSearchParams();
+  const [openId, setOpenId] = useState<string | null>(searchParams.get('sortie'));
   const list = useMemo(() => sortActivities(activities.data ?? []), [activities.data]);
   const tracks = useMemo(
     () => list.map(({ id, profile }) => ({ id, lines: [profile.map(({ lng, lat }) => [lng, lat])] })),

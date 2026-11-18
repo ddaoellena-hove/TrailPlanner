@@ -543,4 +543,47 @@ describe('API voyages', () => {
       expect((await post('/api/activities/sync/decisions', { hash: 'x', action: 'import' })).status).toBe(400);
     });
   });
+  describe('lien vers une rando prévue', () => {
+    const put = (route: string, body: unknown) =>
+      request(route, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    it('lie une sortie à une rando de la bibliothèque, la propose, et refuse une rando inconnue', async () => {
+      // La rando prévue et la sortie suivent la même trace.
+      const trace = recordedGpx([northboundPoints(30)], { name: 'Col du Festre' });
+      const { slug } = await createTrip();
+      await uploadGpx(slug, trace);
+      const [route] = (await (await request('/api/library')).json()) as LibraryHike[];
+      const form = new FormData();
+      form.set('file', new File([trace.replace('Col du Festre', 'Sortie au col')], 'sortie.gpx'));
+      const activity = (await (
+        await request('/api/activities', { method: 'POST', body: form })
+      ).json()) as Activity;
+
+      const suggestions = await (
+        await request(`/api/activities/${activity.id}/route-suggestions`)
+      ).json();
+      expect(suggestions).toMatchObject([{ routeId: route!.id }]);
+
+      expect((await put(`/api/activities/${activity.id}/link`, { routeId: 'x' })).status).toBe(400);
+      const unknown = await put(`/api/activities/${activity.id}/link`, {
+        routeId: crypto.randomUUID(),
+      });
+      expect(unknown.status).toBe(400);
+      expect((await unknown.json()).error).toContain('introuvable');
+
+      const linked = await put(`/api/activities/${activity.id}/link`, { routeId: route!.id });
+      expect(await linked.json()).toMatchObject({ id: activity.id, linkedRouteId: route!.id });
+      expect(
+        await (await request(`/api/activities/${activity.id}/route-suggestions`)).json(),
+      ).toEqual([]);
+
+      const unlinked = await put(`/api/activities/${activity.id}/link`, { routeId: null });
+      expect(await unlinked.json()).toEqual(activity);
+      expect((await put(`/api/activities/${crypto.randomUUID()}/link`, { routeId: null })).status).toBe(404);
+    });
+  });
 });
