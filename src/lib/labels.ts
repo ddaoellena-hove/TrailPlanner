@@ -38,6 +38,9 @@ export function dayColor(dayIndex: number): string {
 /** Trajets voiture sur la carte : le retour du trail à l'hébergement ressort. */
 export const DRIVE_COLOR = '#334155';
 export const TRAIL_TO_STAY_COLOR = '#7c3aed';
+export const UNPLANNED_HIKE_COLOR = '#525252';
+export const POI_COLOR = '#2563eb';
+export const STATION_COLORS = { starred: '#eab308', network: '#ea580c', other: '#16a34a' };
 
 export const ASSISTANT_LABELS: Record<AssistantProviderId, { name: string; company: string }> = {
   anthropic: { name: 'Claude', company: 'Anthropic' },

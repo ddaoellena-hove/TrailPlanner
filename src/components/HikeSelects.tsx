@@ -23,13 +23,13 @@ export function LabeledSelect<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <div className="grid gap-1.5">
+    <div className="grid min-w-0 grid-cols-1 gap-1.5">
       <Label htmlFor={id}>{label}</Label>
       <Select value={value} onValueChange={(next) => onChange(next as T)}>
-        <SelectTrigger id={id}>
+        <SelectTrigger id={id} className="[&>span]:min-w-0 [&>span]:truncate">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="max-w-[min(32rem,calc(100vw-2rem))]">
           {(Object.keys(options) as T[]).map((option) => (
             <SelectItem key={option} value={option}>
               {options[option]}

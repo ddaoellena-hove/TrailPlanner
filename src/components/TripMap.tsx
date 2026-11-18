@@ -12,7 +12,15 @@ import Map, {
 } from 'react-map-gl/maplibre';
 import { PlaceIcon } from '@/components/PlaceIcon';
 import { Button } from '@/components/ui/button';
-import { dayColor, DRIVE_COLOR, TRAIL_TO_STAY_COLOR } from '@/lib/labels';
+import { type LegendItem, MapLegend } from '@/components/MapLegend';
+import {
+  dayColor,
+  DRIVE_COLOR,
+  POI_COLOR,
+  STATION_COLORS,
+  TRAIL_TO_STAY_COLOR,
+  UNPLANNED_HIKE_COLOR,
+} from '@/lib/labels';
 import { BASE_LAYERS, type MapView, OVERLAYS, type TripLayerId } from '@/lib/map-layers';
 import { plannedStops } from '../../shared/itinerary';
 import { formatStation } from '@/lib/stations';
@@ -137,7 +145,7 @@ export function TripMap({
   const [openStation, setOpenStation] = useState<FavoriteStation | null>(null);
   const [openPoi, setOpenPoi] = useState<Poi | null>(null);
 
-  const { planned, backups, loose, stops, colorOf, bounds } = useMemo(() => {
+  const { planned, backups, loose, stops, colorOf, bounds, plannedDays } = useMemo(() => {
     const days = trip.days.filter((day) => !dayFilter || day.index === dayFilter);
     const dayOf = new globalThis.Map<string, number>();
     for (const day of trip.days) {
@@ -174,12 +182,72 @@ export function TripMap({
       ...stops.map(({ location }) => [location.lng, location.lat]),
     ]);
     const colorOf = (hike: Hike) => dayColor(dayOf.get(hike.id) ?? 1);
-    return { planned, backups, loose, stops, colorOf, bounds };
+    const plannedDays = [...new Set(planned.flatMap(({ id }) => dayOf.get(id) ?? []))].toSorted(
+      (a, b) => a - b,
+    );
+    return { planned, backups, loose, stops, colorOf, bounds, plannedDays };
   }, [trip, legs, dayFilter]);
 
   const shown = (id: TripLayerId) => ({
     visibility: view.hidden.includes(id) ? ('none' as const) : ('visible' as const),
   });
+
+  const isShown = (id: TripLayerId) => !view.hidden.includes(id);
+  const legend: LegendItem[] = [
+    ...(isShown('hikes')
+      ? [
+          ...plannedDays.map((dayIndex) => ({
+            label: `J${dayIndex}`,
+            color: dayColor(dayIndex),
+            shape: 'line' as const,
+          })),
+          ...(backups.length > 0
+            ? [
+                {
+                  label: 'Repli (couleur du jour)',
+                  color: colorOf(backups[0]!),
+                  shape: 'dashed' as const,
+                },
+              ]
+            : []),
+          ...(loose.length > 0
+            ? [{ label: 'Rando non planifiée', color: UNPLANNED_HIKE_COLOR, shape: 'dashed' as const }]
+            : []),
+        ]
+      : []),
+    ...(isShown('drives')
+      ? [
+          ...(legs.some(({ trailToStay }) => !trailToStay)
+            ? [{ label: 'Voiture', color: DRIVE_COLOR, shape: 'line' as const }]
+            : []),
+          ...(legs.some(({ trailToStay }) => trailToStay)
+            ? [
+                {
+                  label: "Du trail à l'hébergement",
+                  color: TRAIL_TO_STAY_COLOR,
+                  shape: 'line' as const,
+                },
+              ]
+            : []),
+        ]
+      : []),
+    ...(isShown('stations')
+      ? [
+          ...(favoriteStations.length > 0
+            ? [{ label: 'Borne favorite', color: STATION_COLORS.starred, shape: 'dot' as const }]
+            : []),
+          ...(stations.some(({ favorite }) => favorite)
+            ? [{ label: 'Mon réseau', color: STATION_COLORS.network, shape: 'dot' as const }]
+            : []),
+          ...(stations.some(({ favorite }) => !favorite)
+            ? [{ label: 'Autre borne', color: STATION_COLORS.other, shape: 'dot' as const }]
+            : []),
+        ]
+      : []),
+    ...(isShown('pois') && pois.length > 0
+      ? [{ label: 'Point utile', color: POI_COLOR, shape: 'dot' as const }]
+      : []),
+  ];
 
   // Réordonner garde le même cadrage : la carte ne bouge que si l'emprise change.
   const boundsKey = JSON.stringify(bounds);
@@ -268,12 +336,16 @@ export function TripMap({
           paint={{ 'line-color': ['get', 'color'], 'line-width': 3, 'line-opacity': 0.9 }}
         />
       </Source>
-      <Source type="geojson" data={hikeLines(loose, () => '#525252')}>
+      <Source type="geojson" data={hikeLines(loose, () => UNPLANNED_HIKE_COLOR)}>
         <Layer
           id="hikes-unplanned"
           type="line"
           layout={shown('hikes')}
-          paint={{ 'line-color': '#525252', 'line-width': 3, 'line-dasharray': [2, 1.5] }}
+          paint={{
+            'line-color': UNPLANNED_HIKE_COLOR,
+            'line-width': 3,
+            'line-dasharray': [2, 1.5],
+          }}
         />
       </Source>
       <Source type="geojson" data={hikeLines(backups, colorOf)}>
@@ -326,7 +398,7 @@ export function TripMap({
           type="circle"
           layout={shown('pois')}
           paint={{
-            'circle-color': '#2563eb',
+            'circle-color': POI_COLOR,
             'circle-radius': 4.5,
             'circle-stroke-color': '#ffffff',
             'circle-stroke-width': 1.5,
@@ -342,7 +414,7 @@ export function TripMap({
           type="circle"
           layout={shown('stations')}
           paint={{
-            'circle-color': ['case', ['get', 'favorite'], '#ea580c', '#16a34a'],
+            'circle-color': ['case', ['get', 'favorite'], STATION_COLORS.network, STATION_COLORS.other],
             'circle-radius': ['case', ['get', 'favorite'], 6.5, 4.5],
             'circle-stroke-color': '#ffffff',
             'circle-stroke-width': 1.5,
@@ -355,7 +427,7 @@ export function TripMap({
           type="circle"
           layout={shown('stations')}
           paint={{
-            'circle-color': '#eab308',
+            'circle-color': STATION_COLORS.starred,
             'circle-radius': 8,
             'circle-stroke-color': '#ffffff',
             'circle-stroke-width': 2,
@@ -479,6 +551,7 @@ export function TripMap({
           </Button>
         </Popup>
       )}
+      <MapLegend items={legend} />
     </Map>
   );
 }
