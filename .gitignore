@@ -7,3 +7,6 @@ settings.json
 test-results/
 playwright-report/
 .DS_Store
+
+# Phase 0 : données brutes et catalogues générés
+data-pipeline/data/

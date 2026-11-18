@@ -30,6 +30,16 @@
       ],
       "port": 5185,
       "url": "http://127.0.0.1:5185"
+    },
+    {
+      "name": "catalog-review",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "catalog:review"
+      ],
+      "port": 5176,
+      "url": "http://127.0.0.1:5176"
     }
   ]
 }
