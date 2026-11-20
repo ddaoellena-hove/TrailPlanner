@@ -320,45 +320,19 @@ Voir §8.
 
 ---
 
-## 8. Export Notion
+## 8. Export Obsidian (remplace Notion)
 
-> **Obsolète (20 novembre 2026)** : Notion n'est plus utilisé, Obsidian est la nouvelle base (§12, question 39).
+> **Décision (20 novembre 2026, Q39 close)** : Notion est retiré et remplacé par le vault **Obsidian** (configuré via `obsidianVaultDir` dans les Réglages ou `OBSIDIAN_VAULT_DIR` dans `.env`).
 
-### Cible : structure existante du Life OS
-- Les voyages sont des **pages de la base `Projects`** (data source `b8fc4785-…`), reliées à l'Area **Travel & Outdoors** via la relation `Area`.
-- Propriétés du schéma `Projects` utilisées :
-  - `Project` (title) ← `trip.name`
-  - `Area` (relation) ← `NOTION_AREA_TRAVEL_PAGE_ID`
-  - `Status` (select : Backlog / Active / On hold / Done / Archived) ← `Backlog` à la création, jamais modifié ensuite par l'outil
-  - `Start date` (date, plage) ← `startDate` → `endDate`
-  - `Outcome` (text) ← résumé généré : « N jours / N−1 nuits, X km, Y m D+, départ Z »
-  - `Priority`, `Deadline`, `Tasks`, `Resources`, `Reviews` : **jamais touchés**
-
-### Règle de non-écrasement (critique)
-Les pages projet contiennent du contenu écrit à la main (objectif, réglementation, checklist…). **L'outil ne modifie jamais le contenu d'une page projet existante.** Il écrit exclusivement dans une **sous-page dédiée** qu'il possède :
-`🗺️ Carnet d’itinéraire — généré par Itinera`
-À chaque export, le contenu de cette sous-page est entièrement remplacé. Une sous-page portant un titre des anciens noms de l'outil (« … généré par Trailplan », « … généré par TrailPlanner ») est reprise et renommée, jamais dupliquée.
-
-### Flux
-1. Dialog : « Créer un nouveau projet » ou « Lier à un projet existant » (recherche dans `Projects` filtrée sur Area = Travel & Outdoors).
-2. Si création : crée la page projet (propriétés ci-dessus, icône 🏔️) + la sous-page.
-3. Si lien : met à jour seulement `Start date` (avec confirmation) et crée ou remplace la sous-page.
-4. Stocke `projectPageId` et `itineraryPageId` dans `trip.notion`. Les exports suivants réutilisent ces IDs sans redemander.
-5. Aperçu Markdown du contenu avant envoi.
-
-### Contenu de la sous-page (reprend le format déjà utilisé dans le Life OS)
-1. Callout récap : dates, nb jours/nuits, km, D+, heures de marche et de route totales, date d'export.
-2. **Tableau jour par jour** : `Jour | Secteur et marche | Distance / dénivelé | Route | Nuit | Statut`
-   - Statut = alertes du jour résumées (« Chien à confirmer », « Hébergement à réserver », « OK »).
-3. Une section `## J1 — titre` par jour : timeline (trajets avec durée, randos avec stats et lien AllTrails), nuit (lien, statut de réservation), replis.
-4. `## Hébergements` : tableau nom / nuits / prix / statut / chiens / lien.
-5. `## Points à vérifier` : to-do Notion générés à partir des alertes warning/error.
-6. Pied : « Généré automatiquement par Itinera — ne pas éditer cette page, elle est remplacée à chaque export. »
-
-### Technique
-- `@notionhq/client` avec la version d'API qui supporte les data sources (parent = `data_source_id`). Vérifier la version courante dans la doc Notion.
-- L'intégration doit être partagée avec la base `Projects` : afficher un message d'aide clair en cas d'erreur 404/403.
-- Respecter la limite de blocs par requête (découper par lots de 100) et le rate limit (retry sur 429).
+### Cible : structure existante du Life OS Obsidian
+- **Voyages** → `Projects/` (`Bases/Projects.base`), reliés à `Area: "[[Areas/Travel & Outdoors|Travel & Outdoors]]"` :
+  - **Règle de non-écrasement (critique)** : Itinera ne modifie jamais une note `Projects/<Projet>.md` existante. Il écrit exclusivement dans le sous-fichier dédié `Projects/<Projet>/🗺️ Carnet d’itinéraire — généré par Itinera.md`.
+  - À la création d'un nouveau projet : crée `Projects/<Projet>.md` (structure `Templates/Project.md`, `Status: Backlog`, `Priority: P2`, `Area`, `Outcome`, `Start date`, `icon: 🏔️`, lien vers le carnet) + le sous-fichier carnet. Refuse d'écraser si `Projects/<Projet>.md` existe déjà.
+  - Au lien à un projet existant ou au ré-export : remplace uniquement le sous-fichier carnet, et reprend/supprime un éventuel ancien carnet `Trailplan` / `TrailPlanner` sans doublon.
+- **Sorties enregistrées (« Mes sorties »)** → `Sport/` (`Bases/Sport.base`) :
+  - Note conforme aux séances Garmin (`Date`, `Heure`, `Type: Randonnée`, `Durée` en min, `Distance` en km, `Dénivelé` en m, `Source: AllTrails | GPX`, `icon: 🥾`, `Created`, `itinera_id`, `itinera_fingerprint`, et lien optionnel `Project: "[[Projects/<Projet>|<Projet>]]"`).
+  - Ré-export idempotent : met à jour le front matter et la section `## Données Itinera` en préservant intégralement tout ce qui suit `## Ressenti`. N'écrase jamais une note tierce (Garmin ou manuelle).
+  - Le contrat JSON versionné (`version: 1`, `GET /api/activities/export` et `GET /api/activities/:id/export`) reste disponible en parallèle.
 
 ---
 
@@ -381,10 +355,12 @@ Les pages projet contiennent du contenu écrit à la main (objectif, réglementa
 | GET | `/api/trips/:slug/poi` | eau, refuges, campings, parkings autour des randos (Overpass) |
 | POST | `/api/map-link` | position d'un lien Google Maps (lien lu tel quel, lien court suivi par redirection, jamais de lecture de page) |
 | GET/PUT | `/api/settings` | réglages |
-| GET | `/api/health` | état des clés ORS / Notion |
-| POST | `/api/trips/:slug/notion/preview` | Markdown de l'export |
-| POST | `/api/trips/:slug/notion/export` | export |
-| GET | `/api/notion/projects?q=` | recherche projets Travel & Outdoors |
+| GET | `/api/health` | état des clés ORS / Assistant et du vault Obsidian |
+| GET | `/api/obsidian/projects?q=` | liste les projets de `Projects/` du vault Obsidian |
+| POST | `/api/trips/:slug/obsidian/preview` | Markdown du carnet de voyage |
+| POST | `/api/trips/:slug/obsidian/export` | écrit le carnet dans `Projects/<Projet>/` (et crée le projet si demandé) |
+| POST | `/api/activities/:id/obsidian/preview` | aperçu de la note `Sport/` pour une sortie |
+| POST | `/api/activities/:id/obsidian/export` | écrit ou met à jour la note de sortie dans `Sport/` |
 
 Le serveur écoute **uniquement sur 127.0.0.1**.
 
@@ -495,5 +471,5 @@ Relevées pendant l'audit de l'intégration AllTrails (14 novembre 2026, détail
 36. ~~Lien d'une activité ?~~ Tranché par David : vers une rando de la bibliothèque.
 37. ~~Doublons et taille maximale ?~~ Tranché par David : départ à 10 min près, distance à 5 % près, 80 % des points à moins de 50 m ; 10 Mo.
 38. ~~Life OS de la V2 : Notion ou Obsidian ?~~ Tranché par David (15 novembre 2026) : Notion n'est plus utilisé pour documenter les randos ; la cible des sorties est le Life OS Obsidian.
-39. ~~L'export Notion des voyages (§8, M5) reste-t-il utile ?~~ Tranché par David (20 novembre 2026) : Notion est obsolète, Obsidian est la nouvelle base. Reste à décider si l'export Notion est retiré ou remplacé par un export Obsidian du carnet ; en attendant, le code reste en place.
+39. ~~L'export Notion des voyages (§8, M5) reste-t-il utile ?~~ Tranché par David (20 novembre 2026) : Notion est retiré et remplacé par l'export **Obsidian** — carnets de voyage dans `Projects/<Projet>/🗺️ Carnet d’itinéraire — généré par Itinera.md` (sans jamais modifier une note projet existante) et sorties enregistrées dans `Sport/` (`Bases/Sport.base`) avec lien optionnel vers un Projet.
 40. ~~Synchronisation automatique AllTrails ?~~ Tranché par David : aucun accès autorisé (pas d'API publique), donc dossier surveillé où déposer les exports GPX, importés par le pipeline existant (`activityImportFolder`, `trips/.activities/sync.json`).

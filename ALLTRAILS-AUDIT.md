@@ -160,3 +160,18 @@ As approved in D2/D3:
 - The route sheet lists its linked recordings, each opening `/sorties?sortie=<id>`.
 - Fix found while checking: a map created in an opening panel was framed for the wrong size; it now re-frames on load and resize until the user moves it.
 - Note: a planned route and its recording can show different D+ for the same ground, because routes use the 5 m threshold (DEM elevations) and recordings 2 m (GPS elevations).
+
+## 9. Phase 5 — delivered (2026-11-20, branch `feat/activities-lifeos-export`)
+
+Versioned Life OS export contract targeting **Obsidian**, strictly read-only (no write to Obsidian or Notion):
+- **Schemas** in `shared/schema.ts`: `ActivityExportSchema` (`version: 1`, `kind: 'activity'`, `target: 'obsidian'`) and `ActivityExportBundleSchema` (`version: 1`, `kind: 'activity-export-bundle'`, `target: 'obsidian'`).
+- **Pure builders** in `shared/lifeos-export.ts` (`buildActivityExport`, `buildActivityExportBundle`, `activityExportFileName`, `activityBundleExportFileName`), unit-tested in `shared/lifeos-export.test.ts`:
+  - Preserves raw ISO timestamps (`activityDate`, `endedAt`) alongside local `Europe/Paris` fields (`localDate`, `localStartTime`, `localEndTime`) for Obsidian note naming and daily notes.
+  - Keeps SI units (metres, seconds) throughout, marks every metric's origin (`calculated` / `source` / `null`), and leaves unknown values `null` (never fabricated).
+  - Keeps `plannedRoute` strictly separate from `activity` (included only when `linkedRouteId` matches a library route; `null` if unlinked or if the route was deleted).
+- **Read-only API** in `server/app.ts`: `GET /api/activities/export` and `GET /api/activities/:id/export`, covered in `server/app.test.ts`.
+- **UI**: « Exporter JSON » download buttons in `ActivitiesPage` (full bundle) and `ActivitySheet` (single activity).
+- **Direct Obsidian integration (approved 2026-11-20, Notion removed & SPEC Q39 closed)**:
+  - **Trips → `Projects/`**: creates a new `Projects/<Name>.md` (`Templates/Project.md` format, `Area: Travel & Outdoors`) or links to an existing project without ever editing its manual note; writes exclusively `Projects/<Name>/🗺️ Carnet d’itinéraire — généré par Itinera.md` (and cleans up legacy `Trailplan` / `TrailPlanner` carnets).
+  - **Activities → `Sport/`**: writes a `Bases/Sport.base`-compatible note (`Date`, `Heure`, `Type: Randonnée`, `Durée`, `Distance`, `Dénivelé`, `Source`, `icon: 🥾`, optional `Project: "[[Projects/...|...]]"`), preserving `## Ressenti` on re-export and never overwriting Garmin/manual notes.
+  - Pure Markdown/YAML builders in `shared/obsidian.ts` (`shared/obsidian.test.ts`), atomic vault writer in `server/obsidian.ts` (`server/obsidian.test.ts`), UI in `ExportDialog.tsx`, `ActivityObsidianDialog.tsx`, and `SettingsDialog.tsx`. Notion code and `@notionhq/client` removed.

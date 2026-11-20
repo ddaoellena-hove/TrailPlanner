@@ -341,7 +341,7 @@ test('créer un voyage, le retrouver après rechargement, le dupliquer et le sup
     route.fulfill({
       json: {
         ors: 'missing',
-        notion: 'missing',
+        obsidian: 'missing',
         assistant: 'configured',
         assistantProviders: ['anthropic', 'openai'],
       },
@@ -383,10 +383,10 @@ test('créer un voyage, le retrouver après rechargement, le dupliquer et le sup
   await page.getByRole('button', { name: /^Alertes/ }).click();
   await page.getByRole('button', { name: 'Préparation' }).click();
 
-  // Sans token, l'aperçu reste disponible et l'export s'explique.
-  await page.getByRole('button', { name: 'Exporter vers Notion' }).click();
+  // Sans vault configuré, l'aperçu reste disponible et l'export s'explique.
+  await page.getByRole('button', { name: 'Exporter vers Obsidian' }).click();
   await expect(page.getByText(/# Carnet|Tableau jour par jour|Hébergements/).first()).toBeVisible();
-  await expect(page.getByText('NOTION_TOKEN', { exact: false })).toBeVisible();
+  await expect(page.getByText('OBSIDIAN_VAULT_DIR', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'Fermer' }).first().click();
 
   // Lieu ajouté d'un clic droit sur la carte, puis nuit et réservation.

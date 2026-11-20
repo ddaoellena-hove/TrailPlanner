@@ -7,6 +7,7 @@ const RECORDING = 'fixtures/recordings/sur-les-traces-de-voltaire.gpx';
 const TITLE = "Randonnée de l'après-midi à Sur les Traces de Voltaire";
 
 const EXPORTS = path.resolve('.e2e-trips/exports-alltrails');
+const VAULT = path.resolve('.e2e-trips/obsidian-vault');
 
 // Les tests s'enchaînent sur les mêmes données : un échec arrête les suivants.
 test.describe.configure({ mode: 'serial' });
@@ -148,6 +149,23 @@ test('lier une sortie à la rando prévue qu’elle a suivie', async ({ page }) 
   await expect(section.getByRole('columnheader', { name: 'Prévu' })).toBeVisible();
   await expect(section.getByRole('columnheader', { name: 'Réalisé' })).toBeVisible();
 
+  // Contrat d'export JSON (v1, cible Obsidian) : télécharge la sortie et sa rando liée séparément.
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    sheet.getByRole('button', { name: 'Exporter JSON' }).click(),
+  ]);
+  expect(download.suggestedFilename()).toBe('2026-11-14-voltaire-avec-remi.lifeos.json');
+  const exportedPath = await download.path();
+  expect(exportedPath).not.toBeNull();
+  const exported = JSON.parse(await readFile(exportedPath!, 'utf8'));
+  expect(exported).toMatchObject({
+    version: 1,
+    kind: 'activity',
+    target: 'obsidian',
+    activity: { title: 'Voltaire avec Rémi', localDate: '2026-11-14', localStartTime: '13:37' },
+    plannedRoute: { name: 'Sur les traces de Voltaire' },
+  });
+
   // La rando prévue compte comme faite et renvoie vers la sortie.
   await page.goto('/randos');
   const card = page.getByRole('button', { name: /Sur les traces de Voltaire/ });
@@ -165,4 +183,46 @@ test('lier une sortie à la rando prévue qu’elle a suivie', async ({ page }) 
   await expect(page.getByRole('region', { name: 'Rando prévue' })).toContainText(
     'Correspond probablement',
   );
+});
+
+test('exporter un voyage et une sortie vers un vault Obsidian', async ({ page }) => {
+  await mkdir(path.join(VAULT, 'Projects'), { recursive: true });
+  const existingNote = path.join(VAULT, 'Projects', 'Road trip Normandie.md');
+  const manualProject = '---\ntitle: Road trip Normandie\nArea: "[[Areas/Travel & Outdoors|Travel & Outdoors]]"\n---\nNotes manuelles.\n';
+  await writeFile(existingNote, manualProject);
+
+  // Règle le chemin du vault dans les réglages.
+  const current = await (await page.request.get('/api/settings')).json();
+  const saved = await page.request.put('/api/settings', {
+    data: { ...current, obsidianVaultDir: VAULT },
+  });
+  expect(saved.status()).toBe(200);
+
+  // Exporte le voyage Normandie vers le projet existant sans toucher la note projet manuelle.
+  await page.goto('/voyages/normandie');
+  await page.getByRole('button', { name: 'Exporter vers Obsidian' }).click();
+  const tripDialog = page.getByRole('dialog', { name: 'Exporter vers Obsidian' });
+  await tripDialog.getByRole('button', { name: /Road trip Normandie/ }).click();
+  await tripDialog.getByRole('button', { name: 'Exporter', exact: true }).click();
+  await expect(tripDialog).toBeHidden();
+  expect(await readFile(existingNote, 'utf8')).toBe(manualProject);
+  expect(
+    await readFile(
+      path.join(VAULT, 'Projects', 'Road trip Normandie', '🗺️ Carnet d’itinéraire — généré par Itinera.md'),
+      'utf8',
+    ),
+  ).toContain('# 🗺️ Carnet d’itinéraire — généré par Itinera');
+
+  // Exporte une sortie dans Sport/ reliée au projet Road trip Normandie.
+  await page.goto('/sorties');
+  await page.getByRole('button', { name: /Voltaire avec Rémi/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'Voltaire avec Rémi' });
+  await sheet.getByRole('button', { name: 'Obsidian', exact: true }).click();
+  const actDialog = page.getByRole('dialog', { name: 'Exporter la sortie vers Obsidian' });
+  await actDialog.getByRole('combobox', { name: 'Projet lié (optionnel)' }).click();
+  await page.getByRole('option', { name: /Road trip Normandie/ }).click();
+  await expect(actDialog).toContainText('[[Projects/Road trip Normandie|Road trip Normandie]]');
+  await actDialog.getByRole('button', { name: 'Exporter dans Sport/' }).click();
+  await expect(actDialog).toBeHidden();
+  await expect(sheet).toContainText('Obsidian : Sport/2026-11-14 — Randonnée 6,8 km — Voltaire avec Rémi.md');
 });

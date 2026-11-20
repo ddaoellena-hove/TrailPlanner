@@ -162,10 +162,10 @@ export class TripStore {
     return trip;
   }
 
-  /** Le lien Notion n'appartient qu'à l'export : un « annuler » ne doit pas le perdre. */
+  /** Le lien Obsidian n'appartient qu'à l'export : un « annuler » ne doit pas le perdre. */
   async save(trip: Trip): Promise<Trip> {
-    const { notion } = await this.get(trip.slug);
-    const saved = { ...trip, notion, updatedAt: new Date().toISOString() };
+    const { obsidian, notion } = await this.get(trip.slug);
+    const saved = { ...trip, obsidian, notion, updatedAt: new Date().toISOString() };
     await this.writeTrip(saved);
     return saved;
   }
@@ -199,8 +199,8 @@ export class TripStore {
     return HikeSchema.parse({ ...source, id, gpxFile });
   }
 
-  async setNotion(slug: string, notion: NonNullable<Trip['notion']>): Promise<Trip> {
-    const saved = { ...(await this.get(slug)), notion, updatedAt: new Date().toISOString() };
+  async setObsidian(slug: string, obsidian: NonNullable<Trip['obsidian']>): Promise<Trip> {
+    const saved = { ...(await this.get(slug)), obsidian, updatedAt: new Date().toISOString() };
     await this.writeTrip(saved);
     return saved;
   }
@@ -236,7 +236,7 @@ export class TripStore {
     await writeAtomic(path.join(this.dir, slug, 'cache', 'poi.json'), JSON.stringify(cache));
   }
 
-  /** Copie aussi GPX et cache. Le lien Notion n'est pas repris : la copie ne doit pas écraser le carnet de l'original. */
+  /** Copie aussi GPX et cache. Le lien Obsidian n'est pas repris : la copie ne doit pas écraser le carnet de l'original. */
   async duplicate(slug: string): Promise<Trip> {
     const source = await this.get(slug);
     const name = `${source.name} (copie)`;
@@ -245,6 +245,7 @@ export class TripStore {
     const now = new Date().toISOString();
     const copy: Trip = {
       ...source,
+      obsidian: undefined,
       notion: undefined,
       id: randomUUID(),
       slug: newSlug,

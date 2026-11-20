@@ -463,7 +463,7 @@ function TripWorkspace({ trip, slug }: { trip: Trip; slug: string }) {
             </span>
             <Button variant="outline" size="sm" onClick={() => setExporting(true)}>
               <BookOpenText aria-hidden />
-              Exporter vers Notion
+              Exporter vers Obsidian
             </Button>
             <Button
               variant="ghost"

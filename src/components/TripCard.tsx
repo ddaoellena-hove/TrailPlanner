@@ -91,9 +91,9 @@ export function TripCard({ trip }: { trip: TripSummary }) {
           {formatKm(trip.totalKm)} · {formatElevationGain(trip.totalElevationGainM)}
         </p>
         <div>
-          <Badge variant={trip.lastNotionExportAt ? 'secondary' : 'outline'}>
-            {trip.lastNotionExportAt
-              ? `Exporté le ${formatDateRange(trip.lastNotionExportAt.slice(0, 10), trip.lastNotionExportAt.slice(0, 10))}`
+          <Badge variant={trip.lastExportAt ? 'secondary' : 'outline'}>
+            {trip.lastExportAt
+              ? `Exporté le ${formatDateRange(trip.lastExportAt.slice(0, 10), trip.lastExportAt.slice(0, 10))}`
               : 'Non exporté'}
           </Badge>
         </div>
