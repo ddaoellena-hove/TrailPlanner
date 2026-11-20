@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "trailplanner",
+      "name": "itinera",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",
@@ -12,7 +12,7 @@
       "url": "http://127.0.0.1:5175"
     },
     {
-      "name": "trailplanner-sandbox",
+      "name": "itinera-sandbox",
       "runtimeExecutable": "env",
       "runtimeArgs": [
         "TRIPS_DIR=./.e2e-trips/sandbox",

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CARNET_LEGACY_TITLE, CARNET_TITLE, type CarnetBlock } from '../shared/carnet';
+import { CARNET_LEGACY_TITLES, CARNET_TITLE, type CarnetBlock } from '../shared/carnet';
 import type { Trip } from '../shared/schema';
 import { NotionExporter, toNotionBlocks } from './notion';
 
@@ -136,9 +136,9 @@ describe('export Notion', () => {
     expect(children.get('projet')).toHaveLength(2);
   });
 
-  it('reprend et renomme un carnet créé sous l’ancien nom de l’outil', async () => {
+  it.each(CARNET_LEGACY_TITLES)('reprend et renomme un carnet créé sous un ancien nom : %s', async (title) => {
     const { api } = fakeNotion({
-      projet: [{ id: 'carnet', type: 'child_page', title: CARNET_LEGACY_TITLE }],
+      projet: [{ id: 'carnet', type: 'child_page', title }],
       carnet: [{ id: 'ancien', type: 'paragraph' }],
     });
     const known = { ...trip, notion: { projectPageId: 'projet' } };
@@ -147,9 +147,33 @@ describe('export Notion', () => {
 
     expect(ids.itineraryPageId).toBe('carnet');
     expect(api.pages.create).not.toHaveBeenCalled();
-    expect(api.pages.update).toHaveBeenCalledWith(
-      expect.objectContaining({ page_id: 'carnet' }),
-    );
+    expect(api.pages.update).toHaveBeenCalledWith({
+      page_id: 'carnet',
+      properties: { title: { title: [{ text: { content: CARNET_TITLE } }] } },
+    });
+  });
+
+  it('retrouve le carnet « généré par TrailPlanner » et le renomme en « généré par Itinera »', async () => {
+    const { api, children } = fakeNotion({
+      projet: [
+        { id: 'objectif', type: 'paragraph' },
+        { id: 'carnet', type: 'child_page', title: '🗺️ Carnet d’itinéraire — généré par TrailPlanner' },
+      ],
+      carnet: [{ id: 'ancien', type: 'paragraph' }],
+    });
+    const known = { ...trip, notion: { projectPageId: 'projet' } };
+
+    const ids = await exporter(api).export(known, { mode: 'create' }, blocks, '');
+
+    expect(ids.itineraryPageId).toBe('carnet');
+    expect(api.pages.create).not.toHaveBeenCalled();
+    expect(api.pages.update).toHaveBeenCalledWith({
+      page_id: 'carnet',
+      properties: {
+        title: { title: [{ text: { content: '🗺️ Carnet d’itinéraire — généré par Itinera' } }] },
+      },
+    });
+    expect(children.get('projet')).toHaveLength(2);
   });
 
   it('ne vide jamais une autre sous-page, même avec un id stocké trompeur', async () => {

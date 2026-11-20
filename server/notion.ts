@@ -5,7 +5,7 @@ import {
   isFullBlock,
   isNotionClientError,
 } from '@notionhq/client';
-import { CARNET_LEGACY_TITLE, CARNET_TITLE, type CarnetBlock, type Inline } from '../shared/carnet';
+import { CARNET_LEGACY_TITLES, CARNET_TITLE, type CarnetBlock, type Inline } from '../shared/carnet';
 import type { NotionExportRequest, NotionProject, Trip } from '../shared/schema';
 
 const MAX_BLOCKS_PER_REQUEST = 100;
@@ -182,7 +182,7 @@ export class NotionExporter {
     for (const block of children) {
       if (!isFullBlock(block) || block.type !== 'child_page') continue;
       if (block.child_page.title === CARNET_TITLE) return block.id;
-      if (block.child_page.title === CARNET_LEGACY_TITLE) {
+      if (CARNET_LEGACY_TITLES.includes(block.child_page.title)) {
         await this.notion.pages.update({
           page_id: block.id,
           properties: { title: { title: [{ text: { content: CARNET_TITLE } }] } },

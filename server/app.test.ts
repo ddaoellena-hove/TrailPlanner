@@ -47,7 +47,7 @@ describe('API voyages', () => {
   const createTrip = async (input = newTrip) => (await (await post('/api/trips', input)).json()) as Trip;
 
   beforeEach(async () => {
-    dir = await mkdtemp(path.join(tmpdir(), 'trailplanner-'));
+    dir = await mkdtemp(path.join(tmpdir(), 'itinera-'));
     app = createApp({ tripsDir: dir, health: () => ({ ors: 'missing', notion: 'missing', assistant: 'missing', assistantProviders: [] }) });
   });
 
