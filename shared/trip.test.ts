@@ -137,7 +137,7 @@ describe('summarizeTrip', () => {
     expect(summary.totalKm).toBe(14.5);
     expect(summary.totalElevationGainM).toBe(800);
     expect(summary.dayCount).toBe(3);
-    expect(summary.lastNotionExportAt).toBeNull();
+    expect(summary.lastExportAt).toBeNull();
   });
 });
 

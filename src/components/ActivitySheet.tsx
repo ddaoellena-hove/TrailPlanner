@@ -1,6 +1,7 @@
-import { Download } from 'lucide-react';
+import { BookOpen, Download } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { ActivityObsidianDialog } from '@/components/ActivityObsidianDialog';
 import { ActivityStats, SourceBadge } from '@/components/ActivityStats';
 import { ProfileChart } from '@/components/ProfileChart';
 import { RouteLinkSection } from '@/components/RouteLinkSection';
@@ -43,6 +44,7 @@ export function ActivitySheet({ activity, onClose }: { activity: Activity; onClo
   );
   const [cursor, setCursor] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [obsidianOpen, setObsidianOpen] = useState(false);
   const points = useMemo(
     () => buildProfile([{ id: activity.id, stats: { profile: activity.profile } }]),
     [activity],
@@ -76,16 +78,27 @@ export function ActivitySheet({ activity, onClose }: { activity: Activity; onClo
               <SourceBadge source={activity.source} />
               <span>Trace enregistrée</span>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={exporting}
-              onClick={exportJson}
-            >
-              <Download aria-hidden />
-              Exporter JSON
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setObsidianOpen(true)}
+              >
+                <BookOpen aria-hidden />
+                Obsidian
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={exporting}
+                onClick={exportJson}
+              >
+                <Download aria-hidden />
+                Exporter JSON
+              </Button>
+            </div>
           </div>
 
           <div className="h-72 overflow-hidden rounded-lg border">
@@ -114,6 +127,13 @@ export function ActivitySheet({ activity, onClose }: { activity: Activity; onClo
 
           <RouteLinkSection activity={activity} routes={routes} />
 
+          {activity.obsidian && (
+            <p className="text-xs text-muted-foreground">
+              Obsidian : <code>{activity.obsidian.notePath}</code>
+              {activity.obsidian.projectName ? ` (projet « ${activity.obsidian.projectName} »)` : ''}
+            </p>
+          )}
+
           <p className="text-xs text-muted-foreground">
             Importée le {formatShortDate(activity.importedAt)} depuis {activity.originalFileName},{' '}
             {activity.pointCount.toLocaleString('fr-FR')} points. Le temps en mouvement n'est pas
@@ -121,6 +141,9 @@ export function ActivitySheet({ activity, onClose }: { activity: Activity; onClo
           </p>
         </div>
       </SheetContent>
+      {obsidianOpen && (
+        <ActivityObsidianDialog activity={activity} onClose={() => setObsidianOpen(false)} />
+      )}
     </Sheet>
   );
 }

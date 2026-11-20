@@ -12,7 +12,8 @@ import {
   type Hike,
   type LibraryHike,
   type NewTrip,
-  type NotionPreview,
+  type ObsidianActivityPreview,
+  type ObsidianTripPreview,
   type Settings,
   type Trip,
   type TripSummary,
@@ -50,7 +51,7 @@ describe('API voyages', () => {
 
   beforeEach(async () => {
     dir = await mkdtemp(path.join(tmpdir(), 'itinera-'));
-    app = createApp({ tripsDir: dir, health: () => ({ ors: 'missing', notion: 'missing', assistant: 'missing', assistantProviders: [] }) });
+    app = createApp({ tripsDir: dir, health: () => ({ ors: 'missing', obsidian: 'missing', assistant: 'missing', assistantProviders: [] }) });
   });
 
   afterEach(async () => {
@@ -67,7 +68,7 @@ describe('API voyages', () => {
     expect(created.origin).toBeUndefined();
 
     // Une nouvelle instance simule le redémarrage du serveur.
-    app = createApp({ tripsDir: dir, health: () => ({ ors: 'missing', notion: 'missing', assistant: 'missing', assistantProviders: [] }) });
+    app = createApp({ tripsDir: dir, health: () => ({ ors: 'missing', obsidian: 'missing', assistant: 'missing', assistantProviders: [] }) });
     expect(await (await request(`/api/trips/${created.slug}`)).json()).toEqual(created);
   });
 
@@ -162,12 +163,19 @@ describe('API voyages', () => {
     expect(trashed[0]?.startsWith(`${slug}-`)).toBe(true);
   });
 
-  it('duplique sans reprendre le lien Notion', async () => {
+  it('duplique sans reprendre le lien Obsidian', async () => {
     const trip = await createTrip();
     await writeFile(path.join(dir, trip.slug, 'marker.gpx'), '<gpx/>');
     await writeFile(
       path.join(dir, trip.slug, 'trip.json'),
-      JSON.stringify({ ...trip, notion: { projectPageId: 'abc' } }),
+      JSON.stringify({
+        ...trip,
+        obsidian: {
+          projectName: 'Dévoluy',
+          carnetPath: 'Projects/Dévoluy/carnet.md',
+          lastExportAt: '2026-11-20T10:00:00.000Z',
+        },
+      }),
     );
 
     const copy = (await (await post(`/api/trips/${trip.slug}/duplicate`, {})).json()) as Trip;
@@ -175,7 +183,7 @@ describe('API voyages', () => {
     expect(copy.name).toBe('Dévoluy & Champsaur (copie)');
     expect(copy.slug).toBe('devoluy-champsaur-copie');
     expect(copy.id).not.toBe(trip.id);
-    expect(copy.notion).toBeUndefined();
+    expect(copy.obsidian).toBeUndefined();
     expect(await readdir(path.join(dir, copy.slug))).toContain('marker.gpx');
   });
 
@@ -328,17 +336,22 @@ describe('API voyages', () => {
     expect(hostile.status).toBe(400);
   });
 
-  it('garde le lien Notion quand une sauvegarde ne le porte pas', async () => {
+  it('garde le lien Obsidian quand une sauvegarde ne le porte pas', async () => {
     const trip = await createTrip();
+    const link = {
+      projectName: 'Dévoluy',
+      carnetPath: 'Projects/Dévoluy/carnet.md',
+      lastExportAt: '2026-11-20T10:00:00.000Z',
+    };
     await writeFile(
       path.join(dir, trip.slug, 'trip.json'),
-      JSON.stringify({ ...trip, notion: { projectPageId: 'abc' } }),
+      JSON.stringify({ ...trip, obsidian: link }),
     );
     const saved = await request(`/api/trips/${trip.slug}`, {
       method: 'PUT',
       body: JSON.stringify(trip),
     });
-    expect(((await saved.json()) as Trip).notion).toEqual({ projectPageId: 'abc' });
+    expect(((await saved.json()) as Trip).obsidian).toEqual(link);
   });
 
   it('explique que l’assistant est désactivé sans clé', async () => {
@@ -372,7 +385,7 @@ describe('API voyages', () => {
       assistants: [fake('Claude'), fake('ChatGPT')],
       health: () => ({
         ors: 'missing',
-        notion: 'missing',
+        obsidian: 'missing',
         assistant: 'configured',
         assistantProviders: ['anthropic', 'openai'],
       }),
@@ -400,21 +413,78 @@ describe('API voyages', () => {
     expect((await post(`/api/trips/${slug}/assistant`, { message: '' })).status).toBe(400);
   });
 
-  it('prévisualise le carnet, et refuse d’exporter sans token', async () => {
+  it('prévisualise le carnet et exporte voyages et sorties vers un vault Obsidian', async () => {
     const { slug } = await createTrip();
-    const preview = await post(`/api/trips/${slug}/notion/preview`, {});
+    const preview = await post(`/api/trips/${slug}/obsidian/preview`, {});
     expect(preview.status).toBe(200);
-    expect(((await preview.json()) as NotionPreview).outcome).toContain('5 jours / 4 nuits');
+    expect(((await preview.json()) as ObsidianTripPreview).outcome).toContain('5 jours / 4 nuits');
 
-    const exported = await post(`/api/trips/${slug}/notion/export`, { mode: 'create' });
-    expect(exported.status).toBe(503);
-    expect((await request('/api/notion/projects?q=x')).status).toBe(503);
+    // Sans vault configuré : export et liste de projets indisponibles (503).
+    expect((await post(`/api/trips/${slug}/obsidian/export`, { mode: 'create' })).status).toBe(503);
+    expect((await request('/api/obsidian/projects?q=x')).status).toBe(503);
+
+    // Un chemin relatif est refusé dans les réglages.
+    expect(
+      (
+        await request('/api/settings', {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ...DEFAULT_SETTINGS, obsidianVaultDir: 'vault-relatif' }),
+        })
+      ).status,
+    ).toBe(400);
+
+    // Une fois le vault configuré dans les réglages, /api/health le détecte et l'export écrit.
+    const vault = path.join(dir, 'vault');
+    await mkdir(vault);
+    await request('/api/settings', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...DEFAULT_SETTINGS, obsidianVaultDir: vault }),
+    });
+    expect(await (await request('/api/health')).json()).toMatchObject({ obsidian: 'configured' });
+
+    const exportedTrip = (await (
+      await post(`/api/trips/${slug}/obsidian/export`, { mode: 'create' })
+    ).json()) as Trip;
+    expect(exportedTrip.obsidian?.projectName).toBe('Dévoluy & Champsaur');
+    expect(await readFile(path.join(vault, exportedTrip.obsidian!.carnetPath), 'utf8')).toContain(
+      'Carnet d’itinéraire — généré par Itinera',
+    );
+    expect(await (await request('/api/obsidian/projects')).json()).toMatchObject([
+      { name: 'Dévoluy & Champsaur', area: 'Travel & Outdoors' },
+    ]);
+
+    // Export d'une sortie dans Sport/ liée au projet créé.
+    const form = new FormData();
+    form.set('file', new File([recordedGpx([northboundPoints(20)])], 'sortie.gpx'));
+    const activity = (await (
+      await request('/api/activities', { method: 'POST', body: form })
+    ).json()) as Activity;
+
+    const activityPreview = (await (
+      await post(`/api/activities/${activity.id}/obsidian/preview`, {
+        projectName: 'Dévoluy & Champsaur',
+      })
+    ).json()) as ObsidianActivityPreview;
+    expect(activityPreview.relativePath).toMatch(/^Sport\/.+\.md$/);
+    expect(activityPreview.markdown).toContain('[[Projects/Dévoluy & Champsaur|Dévoluy & Champsaur]]');
+
+    const exportedActivity = (await (
+      await post(`/api/activities/${activity.id}/obsidian/export`, {
+        projectName: 'Dévoluy & Champsaur',
+      })
+    ).json()) as Activity;
+    expect(exportedActivity.obsidian?.projectName).toBe('Dévoluy & Champsaur');
+    expect(
+      await readFile(path.join(vault, exportedActivity.obsidian!.notePath), 'utf8'),
+    ).toContain('Type: Randonnée');
   });
 
-  it('expose l’état des clés', async () => {
+  it('expose l’état des services', async () => {
     expect(await (await request('/api/health')).json()).toEqual({
       ors: 'missing',
-      notion: 'missing',
+      obsidian: 'missing',
       assistant: 'missing',
       assistantProviders: [],
     });

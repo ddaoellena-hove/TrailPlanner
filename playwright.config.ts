@@ -17,8 +17,8 @@ export default defineConfig({
     env: {
       TRIPS_DIR: './.e2e-trips',
       SETTINGS_FILE: './.e2e-trips/settings.json',
-      // Vides, ces variables priment sur .env : l'e2e ne touche jamais aux vrais services à clé.
-      NOTION_TOKEN: '',
+      // Vides, ces variables priment sur .env : l'e2e ne touche jamais aux vrais services ou au vrai vault.
+      OBSIDIAN_VAULT_DIR: '',
       ORS_API_KEY: '',
       OPENCHARGEMAP_API_KEY: '',
       ANTHROPIC_API_KEY: '',

@@ -159,6 +159,14 @@ export const ActivitySchema = ActivityDraftSchema.extend({
   linkedRouteId: z.uuid().nullable(),
   importedAt: IsoDateTimeSchema,
   notes: z.string().optional(),
+  /** Lien vers la note exportée dans `Sport/` du vault Obsidian. */
+  obsidian: z
+    .object({
+      notePath: z.string().min(1),
+      projectName: z.string().min(1).optional(),
+      lastExportAt: IsoDateTimeSchema,
+    })
+    .optional(),
 });
 export type Activity = z.infer<typeof ActivitySchema>;
 
@@ -404,6 +412,14 @@ export const TripSchema = z
     days: z.array(DaySchema),
     expenses: z.array(ExpenseSchema).optional(),
     checklist: z.array(ChecklistItemSchema).optional(),
+    obsidian: z
+      .object({
+        projectName: z.string().min(1),
+        carnetPath: z.string().min(1),
+        lastExportAt: IsoDateTimeSchema,
+      })
+      .optional(),
+    /** Champ hérité des voyages exportés avant l'abandon de Notion : conservé pour la lecture. */
     notion: z
       .object({
         projectPageId: z.string().optional(),
@@ -437,7 +453,7 @@ export const TripSummarySchema = z.object({
   dayCount: z.number().int().positive(),
   totalKm: z.number().nonnegative(),
   totalElevationGainM: z.number().nonnegative(),
-  lastNotionExportAt: IsoDateTimeSchema.nullable(),
+  lastExportAt: IsoDateTimeSchema.nullable(),
 });
 export type TripSummary = z.infer<typeof TripSummarySchema>;
 
@@ -528,6 +544,8 @@ export const SettingsSchema = z.object({
   activityImportFolder: z.string().min(1).optional(),
   /** Synchronisation automatique du dossier, désactivée par défaut. */
   activityAutoSync: z.boolean().optional(),
+  /** Chemin absolu du vault Obsidian (remplace OBSIDIAN_VAULT_DIR si renseigné). */
+  obsidianVaultDir: z.string().min(1).optional(),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
@@ -560,21 +578,44 @@ export const PoiSchema = z.object({
 });
 export type Poi = z.infer<typeof PoiSchema>;
 
-export const NotionExportRequestSchema = z.discriminatedUnion('mode', [
-  z.object({ mode: z.literal('create') }),
+export const ObsidianProjectSchema = z.object({
+  name: z.string().min(1),
+  path: z.string().min(1),
+  area: z.string().nullable(),
+  status: z.string().nullable(),
+});
+export type ObsidianProject = z.infer<typeof ObsidianProjectSchema>;
+
+export const ObsidianTripExportRequestSchema = z.discriminatedUnion('mode', [
+  z.object({
+    mode: z.literal('create'),
+    projectName: z.string().trim().min(1).optional(),
+  }),
   z.object({
     mode: z.literal('link'),
-    projectPageId: z.string().min(1),
-    updateStartDate: z.boolean(),
+    projectName: z.string().trim().min(1),
   }),
 ]);
-export type NotionExportRequest = z.infer<typeof NotionExportRequestSchema>;
+export type ObsidianTripExportRequest = z.infer<typeof ObsidianTripExportRequestSchema>;
 
-export const NotionProjectSchema = z.object({ id: z.string(), title: z.string() });
-export type NotionProject = z.infer<typeof NotionProjectSchema>;
+export const ObsidianTripPreviewSchema = z.object({
+  markdown: z.string(),
+  outcome: z.string(),
+  carnetTitle: z.string(),
+});
+export type ObsidianTripPreview = z.infer<typeof ObsidianTripPreviewSchema>;
 
-export const NotionPreviewSchema = z.object({ markdown: z.string(), outcome: z.string() });
-export type NotionPreview = z.infer<typeof NotionPreviewSchema>;
+export const ObsidianActivityExportRequestSchema = z.object({
+  projectName: z.string().trim().min(1).nullable().optional(),
+});
+export type ObsidianActivityExportRequest = z.infer<typeof ObsidianActivityExportRequestSchema>;
+
+export const ObsidianActivityPreviewSchema = z.object({
+  fileName: z.string().min(1),
+  relativePath: z.string().min(1),
+  markdown: z.string(),
+});
+export type ObsidianActivityPreview = z.infer<typeof ObsidianActivityPreviewSchema>;
 
 export const DEFAULT_SETTINGS: Settings = {
   pace: { flatKmh: 4, ascentMPerH: 300, descentMPerH: 500, breakFactor: 1 },
@@ -585,7 +626,7 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export const HealthSchema = z.object({
   ors: z.enum(['configured', 'missing', 'invalid']),
-  notion: z.enum(['configured', 'missing', 'invalid']),
+  obsidian: z.enum(['configured', 'missing', 'invalid']),
   assistant: z.enum(['configured', 'missing']),
   assistantProviders: z.array(AssistantProviderIdSchema),
 });

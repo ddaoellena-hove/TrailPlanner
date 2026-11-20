@@ -1,22 +1,11 @@
 import { serve } from '@hono/node-server';
 import Anthropic from '@anthropic-ai/sdk';
-import { Client } from '@notionhq/client';
 import OpenAI from 'openai';
 import { createApp } from './app';
 import { env } from './env';
 import { checkKeys } from './health';
 import { anthropicProvider } from './assistant-anthropic';
 import { openaiProvider } from './assistant-openai';
-import { NotionExporter } from './notion';
-
-const notionClient = env.notionToken ? new Client({ auth: env.notionToken }) : undefined;
-const notion =
-  notionClient && env.notionDataSourceId && env.notionAreaPageId
-    ? new NotionExporter(notionClient, {
-        dataSourceId: env.notionDataSourceId,
-        areaPageId: env.notionAreaPageId,
-      })
-    : undefined;
 
 const assistants = [
   ...(env.anthropicApiKey
@@ -35,11 +24,11 @@ const app = createApp({
   settingsFile: env.settingsFile,
   orsApiKey: env.orsApiKey,
   openChargeMapKey: env.openChargeMapKey,
-  notion,
+  obsidianVaultDir: env.obsidianVaultDir,
   health: () =>
     (health ??= checkKeys(
       env.orsApiKey,
-      notionClient,
+      env.obsidianVaultDir,
       assistants.map(({ id }) => id),
     )),
   assistants,

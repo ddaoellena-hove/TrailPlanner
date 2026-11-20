@@ -122,6 +122,22 @@ export class ActivityStore {
     });
   }
 
+  /** Mémorise la note Obsidian exportée pour la sortie (chemin dans `Sport/` et projet lié). */
+  setObsidian(id: string, obsidian: NonNullable<Activity['obsidian']>): Promise<Activity> {
+    return this.exclusive(async () => {
+      const current = await this.load();
+      const activity = current.activities.find((candidate) => candidate.id === id);
+      if (!activity) throw new ActivityNotFoundError(id);
+      const updated: Activity = { ...activity, obsidian };
+      const next = ActivityStoreSchema.parse({
+        ...current,
+        activities: current.activities.map((candidate) => (candidate.id === id ? updated : candidate)),
+      });
+      await this.writeIndex(`${JSON.stringify(next, null, 2)}\n`);
+      return updated;
+    });
+  }
+
   async preview(bytes: Buffer, fileName: string): Promise<ActivityPreview> {
     const draft = draftActivity(bytes, fileName);
     return { draft, duplicate: findDuplicate(draft, await this.list()) };

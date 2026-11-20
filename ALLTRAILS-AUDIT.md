@@ -171,4 +171,7 @@ Versioned Life OS export contract targeting **Obsidian**, strictly read-only (no
   - Keeps `plannedRoute` strictly separate from `activity` (included only when `linkedRouteId` matches a library route; `null` if unlinked or if the route was deleted).
 - **Read-only API** in `server/app.ts`: `GET /api/activities/export` and `GET /api/activities/:id/export`, covered in `server/app.test.ts`.
 - **UI**: « Exporter JSON » download buttons in `ActivitiesPage` (full bundle) and `ActivitySheet` (single activity).
-- **Follow-up (optional direct Obsidian writer)**: still requires the vault path and one existing activity note with its YAML front matter so nothing about the vault's schema is guessed.
+- **Direct Obsidian integration (approved 2026-11-20, Notion removed & SPEC Q39 closed)**:
+  - **Trips → `Projects/`**: creates a new `Projects/<Name>.md` (`Templates/Project.md` format, `Area: Travel & Outdoors`) or links to an existing project without ever editing its manual note; writes exclusively `Projects/<Name>/🗺️ Carnet d’itinéraire — généré par Itinera.md` (and cleans up legacy `Trailplan` / `TrailPlanner` carnets).
+  - **Activities → `Sport/`**: writes a `Bases/Sport.base`-compatible note (`Date`, `Heure`, `Type: Randonnée`, `Durée`, `Distance`, `Dénivelé`, `Source`, `icon: 🥾`, optional `Project: "[[Projects/...|...]]"`), preserving `## Ressenti` on re-export and never overwriting Garmin/manual notes.
+  - Pure Markdown/YAML builders in `shared/obsidian.ts` (`shared/obsidian.test.ts`), atomic vault writer in `server/obsidian.ts` (`server/obsidian.test.ts`), UI in `ExportDialog.tsx`, `ActivityObsidianDialog.tsx`, and `SettingsDialog.tsx`. Notion code and `@notionhq/client` removed.

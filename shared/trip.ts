@@ -67,7 +67,7 @@ export function summarizeTrip(trip: Trip): TripSummary {
     dayCount: countDays(trip.startDate, trip.endDate),
     totalKm,
     totalElevationGainM,
-    lastNotionExportAt: trip.notion?.lastExportAt ?? null,
+    lastExportAt: trip.obsidian?.lastExportAt ?? null,
   };
 }
 

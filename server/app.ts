@@ -9,7 +9,8 @@ import {
   LibraryHikeFieldsSchema,
   NewOutingSchema,
   NewTripSchema,
-  NotionExportRequestSchema,
+  ObsidianActivityExportRequestSchema,
+  ObsidianTripExportRequestSchema,
   SettingsSchema,
   SlugSchema,
   TripSchema,
@@ -17,7 +18,7 @@ import {
 import { computeAlerts } from '../shared/alerts';
 import { LibraryHikeNotFoundError, LibraryStore } from './library-store';
 import { describeTrip } from '../shared/assistant-context';
-import { buildCarnet, carnetOutcome, carnetToMarkdown } from '../shared/carnet';
+import { CARNET_TITLE, buildCarnet, carnetOutcome, carnetToMarkdown } from '../shared/carnet';
 import { plannedStops } from '../shared/itinerary';
 import { ConversationStore, runAssistantTurn } from './assistant';
 import type { AssistantProvider } from './assistant-provider';
@@ -29,11 +30,26 @@ import { ActivityNotFoundError, ActivityStore, DuplicateActivityError } from './
 import { ConnectorError, FolderConnector } from './activity-connector';
 import { ActivitySync, SyncError } from './activity-sync';
 import { suggestRoutes } from '../shared/activity';
-import { buildActivityExport, buildActivityExportBundle } from '../shared/lifeos-export';
+import {
+  buildActivityExport,
+  buildActivityExportBundle,
+  buildActivityExportEntry,
+} from '../shared/lifeos-export';
+import {
+  activitySportFileName,
+  activitySportRelativePath,
+  renderActivitySportNote,
+} from '../shared/obsidian';
 import { AutoSync } from './auto-sync';
 import { GpxError, MAX_GPX_BYTES, parseGpx, parseRecordedGpx } from './gpx';
 import { MapLinkError, resolveMapLink } from './map-link';
-import { NotionExportError, type NotionExporter } from './notion';
+import {
+  ObsidianExportError,
+  checkObsidianVault,
+  exportActivityToObsidian,
+  exportTripToObsidian,
+  listObsidianProjects,
+} from './obsidian';
 import { computeItinerary } from './routing';
 import { SettingsStore } from './settings-store';
 import { TripNotFoundError, TripStore } from './trip-store';
@@ -54,7 +70,7 @@ type AppOptions = {
   health: () => Promise<Health> | Health;
   orsApiKey?: string;
   openChargeMapKey?: string;
-  notion?: NotionExporter;
+  obsidianVaultDir?: string;
   assistants?: AssistantProvider[];
   /** Démarre les passages automatiques du dossier surveillé (le serveur, pas les tests). */
   autoSync?: boolean;
@@ -66,7 +82,7 @@ export function createApp({
   health,
   orsApiKey,
   openChargeMapKey,
-  notion,
+  obsidianVaultDir,
   assistants = [],
   autoSync = false,
 }: AppOptions) {
@@ -121,12 +137,21 @@ export function createApp({
     }
     if (error instanceof GpxError) return c.json({ error: error.message }, 400);
     if (error instanceof MapLinkError) return c.json({ error: error.message }, 400);
-    if (error instanceof NotionExportError) return c.json({ error: error.message }, 502);
+    if (error instanceof ObsidianExportError) return c.json({ error: error.message }, 400);
     console.error(error);
     return c.json({ error: 'Erreur interne du serveur' }, 500);
   });
 
-  app.get('/api/health', async (c) => c.json(await health()));
+  const resolveVaultDir = async (): Promise<string | undefined> =>
+    (await settings.read()).obsidianVaultDir ?? obsidianVaultDir;
+
+  app.get('/api/health', async (c) => {
+    const base = await health();
+    const vaultDir = await resolveVaultDir();
+    // Si un dossier est réglé dans settings.json ou en option, son état est vérifié à chaud.
+    const obsidian = vaultDir ? await checkObsidianVault(vaultDir) : base.obsidian;
+    return c.json({ ...base, obsidian });
+  });
 
   app.get('/api/settings', async (c) => c.json(await settings.read()));
 
@@ -136,6 +161,10 @@ export function createApp({
     const folder = body.data.activityImportFolder;
     if (folder !== undefined && !path.isAbsolute(folder)) {
       return c.json({ error: 'Le dossier de synchronisation doit être un chemin absolu' }, 400);
+    }
+    const vault = body.data.obsidianVaultDir;
+    if (vault !== undefined && !path.isAbsolute(vault)) {
+      return c.json({ error: 'Le dossier du vault Obsidian doit être un chemin absolu' }, 400);
     }
     const { pace } = await settings.read();
     await settings.write(body.data);
@@ -445,9 +474,10 @@ export function createApp({
     });
   });
 
-  const NOTION_MISSING = 'Export désactivé : renseignez NOTION_TOKEN dans .env';
+  const OBSIDIAN_MISSING =
+    'Export désactivé : renseignez le dossier du vault dans les Réglages (ou OBSIDIAN_VAULT_DIR dans .env)';
 
-  const buildExport = async (slug: string) => {
+  const buildTripExport = async (slug: string) => {
     const trip = await store.get(slug);
     const { legs } = await computeItinerary(store, slug, orsApiKey);
     const current = await settings.read();
@@ -456,24 +486,68 @@ export function createApp({
     return { trip, blocks, outcome: carnetOutcome(trip) };
   };
 
-  app.post('/api/trips/:slug/notion/preview', async (c) => {
-    const { blocks, outcome } = await buildExport(c.req.param('slug'));
-    return c.json({ markdown: carnetToMarkdown(blocks), outcome });
+  app.get('/api/obsidian/projects', async (c) => {
+    const vaultDir = await resolveVaultDir();
+    if (!vaultDir) return c.json({ error: OBSIDIAN_MISSING }, 503);
+    return c.json(await listObsidianProjects(vaultDir, c.req.query('q') ?? ''));
   });
 
-  app.post('/api/trips/:slug/notion/export', async (c) => {
-    if (!notion) return c.json({ error: NOTION_MISSING }, 503);
-    const body = NotionExportRequestSchema.safeParse(await c.req.json().catch(() => null));
+  app.post('/api/trips/:slug/obsidian/preview', async (c) => {
+    const { blocks, outcome } = await buildTripExport(c.req.param('slug'));
+    return c.json({ markdown: carnetToMarkdown(blocks), outcome, carnetTitle: CARNET_TITLE });
+  });
+
+  app.post('/api/trips/:slug/obsidian/export', async (c) => {
+    const vaultDir = await resolveVaultDir();
+    if (!vaultDir) return c.json({ error: OBSIDIAN_MISSING }, 503);
+    const body = ObsidianTripExportRequestSchema.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return c.json({ error: 'Demande invalide' }, 400);
-    const { trip, blocks, outcome } = await buildExport(c.req.param('slug'));
-    const ids = await notion.export(trip, body.data, blocks, outcome);
-    const lastExportAt = new Date().toISOString();
-    return c.json(await store.setNotion(trip.slug, { ...ids, lastExportAt }));
+    const { trip, blocks, outcome } = await buildTripExport(c.req.param('slug'));
+    const exported = await exportTripToObsidian(vaultDir, trip, body.data, blocks, outcome);
+    return c.json(await store.setObsidian(trip.slug, exported));
   });
 
-  app.get('/api/notion/projects', async (c) => {
-    if (!notion) return c.json({ error: NOTION_MISSING }, 503);
-    return c.json(await notion.searchProjects(c.req.query('q') ?? ''));
+  const buildActivityEntry = async (id: string) => {
+    const activity = await activities.get(id);
+    const route = activity.linkedRouteId
+      ? (await library.list()).find(({ id: routeId }) => routeId === activity.linkedRouteId)
+      : null;
+    return { activity, entry: buildActivityExportEntry(activity, route) };
+  };
+
+  app.post('/api/activities/:id/obsidian/preview', async (c) => {
+    const raw = await c.req.json().catch(() => ({}));
+    const body = ObsidianActivityExportRequestSchema.safeParse(raw);
+    if (!body.success) return c.json({ error: 'Demande invalide' }, 400);
+    const { activity, entry } = await buildActivityEntry(c.req.param('id'));
+    const projectName =
+      body.data.projectName === undefined
+        ? (activity.obsidian?.projectName ?? null)
+        : body.data.projectName;
+    const fileName = activity.obsidian?.notePath
+      ? path.basename(activity.obsidian.notePath)
+      : activitySportFileName(entry);
+    const today = new Date().toISOString().slice(0, 10);
+    return c.json({
+      fileName,
+      relativePath: activitySportRelativePath(fileName),
+      markdown: renderActivitySportNote(entry, { createdDate: today, projectName }),
+    });
+  });
+
+  app.post('/api/activities/:id/obsidian/export', async (c) => {
+    const vaultDir = await resolveVaultDir();
+    if (!vaultDir) return c.json({ error: OBSIDIAN_MISSING }, 503);
+    const raw = await c.req.json().catch(() => ({}));
+    const body = ObsidianActivityExportRequestSchema.safeParse(raw);
+    if (!body.success) return c.json({ error: 'Demande invalide' }, 400);
+    const { activity, entry } = await buildActivityEntry(c.req.param('id'));
+    const projectName =
+      body.data.projectName === undefined
+        ? (activity.obsidian?.projectName ?? null)
+        : body.data.projectName;
+    const exported = await exportActivityToObsidian(vaultDir, activity, entry, projectName);
+    return c.json(await activities.setObsidian(activity.id, exported));
   });
 
   return app;
