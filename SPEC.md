@@ -322,6 +322,8 @@ Voir §8.
 
 ## 8. Export Notion
 
+> **Obsolète (20 novembre 2026)** : Notion n'est plus utilisé, Obsidian est la nouvelle base (§12, question 39).
+
 ### Cible : structure existante du Life OS
 - Les voyages sont des **pages de la base `Projects`** (data source `b8fc4785-…`), reliées à l'Area **Travel & Outdoors** via la relation `Area`.
 - Propriétés du schéma `Projects` utilisées :
@@ -493,5 +495,5 @@ Relevées pendant l'audit de l'intégration AllTrails (14 novembre 2026, détail
 36. ~~Lien d'une activité ?~~ Tranché par David : vers une rando de la bibliothèque.
 37. ~~Doublons et taille maximale ?~~ Tranché par David : départ à 10 min près, distance à 5 % près, 80 % des points à moins de 50 m ; 10 Mo.
 38. ~~Life OS de la V2 : Notion ou Obsidian ?~~ Tranché par David (15 novembre 2026) : Notion n'est plus utilisé pour documenter les randos ; la cible des sorties est le Life OS Obsidian.
-39. L'export Notion des voyages (§8, M5) reste-t-il utile, puisque Notion n'est plus utilisé pour les randos ? Faut-il le retirer, le garder tel quel, ou le remplacer par un export Obsidian du carnet ? (Provisoire : gardé tel quel, rien n'est retiré.)
+39. ~~L'export Notion des voyages (§8, M5) reste-t-il utile ?~~ Tranché par David (20 novembre 2026) : Notion est obsolète, Obsidian est la nouvelle base. Reste à décider si l'export Notion est retiré ou remplacé par un export Obsidian du carnet ; en attendant, le code reste en place.
 40. ~~Synchronisation automatique AllTrails ?~~ Tranché par David : aucun accès autorisé (pas d'API publique), donc dossier surveillé où déposer les exports GPX, importés par le pipeline existant (`activityImportFolder`, `trips/.activities/sync.json`).
