@@ -1,31 +1,30 @@
 import { randomUUID } from 'node:crypto';
-import { cp, mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { cp, mkdir, readFile, rename } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import type { DriveLeg, Hike, NewTrip, Poi, Trip, TripSummary } from '../shared/schema';
 import { withPace } from '../shared/gpx';
 import {
   DriveLegSchema,
   HikeSchema,
   PoiSchema,
-  type Settings,
   TripSchema,
+  type DriveLeg,
+  type Hike,
+  type NewTrip,
+  type Poi,
+  type Settings,
+  type Trip,
+  type TripSummary,
 } from '../shared/schema';
-import { parseGpx } from './gpx';
 import { generateDays, slugify, summarizeTrip } from '../shared/trip';
+import { UserDb } from './db';
+import { writeAtomic } from './fs-atomic';
+import { parseGpx } from './gpx';
+
+export { writeAtomic };
 
 export class TripNotFoundError extends Error {}
-
-function isErrorCode(error: unknown, code: string): boolean {
-  return error instanceof Error && 'code' in error && error.code === code;
-}
-
-export async function writeAtomic(target: string, content: string | Buffer): Promise<void> {
-  await mkdir(path.dirname(target), { recursive: true });
-  const temporary = `${target}.${randomUUID()}.tmp`;
-  await writeFile(temporary, content);
-  await rename(temporary, target);
-}
 
 export type RouteCache = Record<string, DriveLeg>;
 const RouteCacheSchema = z.record(z.string(), DriveLegSchema);
@@ -33,90 +32,116 @@ const RouteCacheSchema = z.record(z.string(), DriveLegSchema);
 const PoiCacheSchema = z.object({ key: z.string(), at: z.number(), pois: z.array(PoiSchema) });
 type PoiCache = { key: string; at: number; pois: Poi[] };
 
-type GpxUpload = { pace: Settings['pace']; bytes: Buffer; fileName: string; name?: string; alltrailsUrl?: string };
+type GpxUpload = {
+  pace: Settings['pace'];
+  bytes: Buffer;
+  fileName: string;
+  name?: string;
+  alltrailsUrl?: string;
+};
 
-/** Stockage des voyages sur disque : `<dir>/<slug>/trip.json`. */
+/** Stockage des voyages dans SQLite (`itinera.db`) + fichiers GPX immuables sur disque. */
 export class TripStore {
-  constructor(private readonly dir: string) {}
+  private readonly dir: string;
+  private readonly userDb: UserDb;
 
-  private tripPath(slug: string): string {
-    return path.join(this.dir, slug, 'trip.json');
+  constructor(dirOrDb: string | UserDb) {
+    if (typeof dirOrDb === 'string') {
+      this.dir = dirOrDb;
+      this.userDb = new UserDb(dirOrDb);
+    } else {
+      this.dir = dirOrDb.tripsDir;
+      this.userDb = dirOrDb;
+    }
   }
 
   private async writeTrip(trip: Trip): Promise<void> {
-    // Le passage par zod fixe l'ordre des clés : le fichier reste diffable.
-    const content = `${JSON.stringify(TripSchema.parse(trip), null, 2)}\n`;
-    await writeAtomic(this.tripPath(trip.slug), content);
+    const parsed = TripSchema.parse(trip);
+    const data = JSON.stringify(parsed);
+    await this.userDb.db
+      .insertInto('trips')
+      .values({
+        slug: parsed.slug,
+        id: parsed.id,
+        name: parsed.name,
+        start_date: parsed.startDate,
+        end_date: parsed.endDate,
+        data,
+        created_at: parsed.createdAt,
+        updated_at: parsed.updatedAt,
+      })
+      .onConflict((oc) =>
+        oc.column('slug').doUpdateSet({
+          name: parsed.name,
+          start_date: parsed.startDate,
+          end_date: parsed.endDate,
+          data,
+          updated_at: parsed.updatedAt,
+        }),
+      )
+      .execute();
   }
 
-  /** Réserve un dossier libre : mkdir échoue si le slug existe déjà. */
   private async reserveSlug(name: string): Promise<string> {
-    await mkdir(this.dir, { recursive: true });
     const base = slugify(name);
     for (let suffix = 1; ; suffix++) {
       const slug = suffix === 1 ? base : `${base}-${suffix}`;
-      try {
-        await mkdir(path.join(this.dir, slug));
-        return slug;
-      } catch (error) {
-        if (!isErrorCode(error, 'EEXIST')) throw error;
-      }
+      const existing = await this.userDb.db
+        .selectFrom('trips')
+        .select('slug')
+        .where('slug', '=', slug)
+        .executeTakeFirst();
+      if (!existing) return slug;
     }
-  }
-
-  private async slugs(): Promise<string[]> {
-    let entries;
-    try {
-      entries = await readdir(this.dir, { withFileTypes: true });
-    } catch (error) {
-      if (isErrorCode(error, 'ENOENT')) return [];
-      throw error;
-    }
-    return entries
-      .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
-      .map((entry) => entry.name);
   }
 
   async list(): Promise<TripSummary[]> {
-    const trips = await Promise.all(
-      (await this.slugs()).map(async (slug) => {
-        try {
-          return await this.get(slug);
-        } catch (error) {
-          // Un voyage illisible ne doit pas masquer les autres.
-          console.warn(`Voyage ignoré (${slug}) :`, error);
-          return null;
-        }
-      }),
-    );
-    return trips
-      .filter((trip) => trip !== null)
-      .map(summarizeTrip)
-      .sort((a, b) => a.startDate.localeCompare(b.startDate));
+    await this.userDb.ensureReady();
+    const rows = await this.userDb.db
+      .selectFrom('trips')
+      .select(['slug', 'data'])
+      .orderBy('start_date', 'asc')
+      .execute();
+    const summaries: TripSummary[] = [];
+    for (const row of rows) {
+      try {
+        summaries.push(summarizeTrip(TripSchema.parse(JSON.parse(row.data))));
+      } catch (error) {
+        console.warn(`Voyage ignoré (${row.slug}) :`, error);
+      }
+    }
+    return summaries.sort((a, b) => a.startDate.localeCompare(b.startDate));
   }
 
   /** Applique un nouveau rythme à tous les voyages lisibles. */
   async applyPace(pace: Settings['pace']): Promise<void> {
-    for (const slug of await this.slugs()) {
+    await this.userDb.ensureReady();
+    const rows = await this.userDb.db.selectFrom('trips').select(['slug', 'data']).execute();
+    for (const row of rows) {
       try {
-        await this.writeTrip(withPace(await this.get(slug), pace));
+        const trip = TripSchema.parse(JSON.parse(row.data));
+        await this.writeTrip(withPace(trip, pace));
       } catch (error) {
-        console.warn(`Voyage ignoré (${slug}) :`, error);
+        console.warn(`Voyage ignoré (${row.slug}) :`, error);
       }
     }
   }
 
   /** GPX des randos d'un voyage, ou de tous. Un voyage ou un fichier illisible est ignoré. */
   async hikeFiles(slug?: string): Promise<{ hike: Hike; bytes: Buffer }[]> {
+    await this.userDb.ensureReady();
+    const query = this.userDb.db.selectFrom('trips').select(['slug', 'data']);
+    const rows = slug ? await query.where('slug', '=', slug).execute() : await query.execute();
     const files: { hike: Hike; bytes: Buffer }[] = [];
-    for (const current of slug ? [slug] : await this.slugs()) {
+    for (const row of rows) {
       try {
-        for (const hike of (await this.get(current)).hikes) {
-          const bytes = await readFile(path.join(this.dir, current, hike.gpxFile));
+        const trip = TripSchema.parse(JSON.parse(row.data));
+        for (const hike of trip.hikes) {
+          const bytes = await readFile(path.join(this.dir, row.slug, hike.gpxFile));
           files.push({ hike, bytes });
         }
       } catch (error) {
-        console.warn(`Voyage ignoré (${current}) :`, error);
+        console.warn(`Voyage ignoré (${row.slug}) :`, error);
       }
     }
     return files;
@@ -128,17 +153,18 @@ export class TripStore {
   }
 
   async get(slug: string): Promise<Trip> {
-    let content;
-    try {
-      content = await readFile(this.tripPath(slug), 'utf8');
-    } catch (error) {
-      if (isErrorCode(error, 'ENOENT')) throw new TripNotFoundError(slug);
-      throw error;
-    }
-    return TripSchema.parse(JSON.parse(content));
+    await this.userDb.ensureReady();
+    const row = await this.userDb.db
+      .selectFrom('trips')
+      .select('data')
+      .where('slug', '=', slug)
+      .executeTakeFirst();
+    if (!row) throw new TripNotFoundError(slug);
+    return TripSchema.parse(JSON.parse(row.data));
   }
 
   async create(input: NewTrip): Promise<Trip> {
+    await this.userDb.ensureReady();
     const slug = await this.reserveSlug(input.name);
     const now = new Date().toISOString();
     const trip: Trip = {
@@ -170,13 +196,14 @@ export class TripStore {
     return saved;
   }
 
-  /** Conserve le GPX tel quel et renvoie la rando préremplie ; le client l'ajoute au voyage. */
+  /** Conserve le GPX tel quel (dossier du voyage + coffre SHA-256) et renvoie la rando préremplie. */
   async importGpx(slug: string, upload: GpxUpload): Promise<Hike> {
     await this.get(slug);
     const parsed = parseGpx(upload.bytes.toString('utf8'), upload.pace);
     const id = randomUUID();
     const gpxFile = `gpx/${id}.gpx`;
     await writeAtomic(path.join(this.dir, slug, gpxFile), upload.bytes);
+    await this.userDb.storeGpxInVault(upload.bytes, upload.fileName);
     const hike: Hike = {
       id,
       name: upload.name || parsed.name || upload.fileName.replace(/\.gpx$/i, ''),
@@ -196,6 +223,7 @@ export class TripStore {
     const id = randomUUID();
     const gpxFile = `gpx/${id}.gpx`;
     await writeAtomic(path.join(this.dir, slug, gpxFile), bytes);
+    await this.userDb.storeGpxInVault(bytes, `${source.name}.gpx`);
     return HikeSchema.parse({ ...source, id, gpxFile });
   }
 
@@ -205,43 +233,68 @@ export class TripStore {
     return saved;
   }
 
-  private routeCachePath(slug: string): string {
-    return path.join(this.dir, slug, 'cache', 'routes.json');
-  }
-
   /** Un cache absent ou illisible se reconstruit : il n'empêche jamais le calcul. */
   async readRouteCache(slug: string): Promise<RouteCache> {
+    await this.userDb.ensureReady();
+    const row = await this.userDb.db
+      .selectFrom('route_cache')
+      .select('data')
+      .where('trip_slug', '=', slug)
+      .executeTakeFirst();
+    if (!row) return {};
     try {
-      const content = await readFile(this.routeCachePath(slug), 'utf8');
-      return RouteCacheSchema.parse(JSON.parse(content));
+      return RouteCacheSchema.parse(JSON.parse(row.data));
     } catch {
       return {};
     }
   }
 
   async writeRouteCache(slug: string, cache: RouteCache): Promise<void> {
-    await writeAtomic(this.routeCachePath(slug), `${JSON.stringify(cache)}\n`);
+    await this.userDb.ensureReady();
+    const data = JSON.stringify(cache);
+    const updated_at = new Date().toISOString();
+    await this.userDb.db
+      .insertInto('route_cache')
+      .values({ trip_slug: slug, data, updated_at })
+      .onConflict((oc) => oc.column('trip_slug').doUpdateSet({ data, updated_at }))
+      .execute();
   }
 
   async readPoiCache(slug: string): Promise<PoiCache | null> {
+    await this.userDb.ensureReady();
+    const row = await this.userDb.db
+      .selectFrom('poi_cache')
+      .select('data')
+      .where('trip_slug', '=', slug)
+      .executeTakeFirst();
+    if (!row) return null;
     try {
-      const content = await readFile(path.join(this.dir, slug, 'cache', 'poi.json'), 'utf8');
-      return PoiCacheSchema.parse(JSON.parse(content));
+      return PoiCacheSchema.parse(JSON.parse(row.data));
     } catch {
       return null;
     }
   }
 
   async writePoiCache(slug: string, cache: PoiCache): Promise<void> {
-    await writeAtomic(path.join(this.dir, slug, 'cache', 'poi.json'), JSON.stringify(cache));
+    await this.userDb.ensureReady();
+    const data = JSON.stringify(cache);
+    const updated_at = new Date().toISOString();
+    await this.userDb.db
+      .insertInto('poi_cache')
+      .values({ trip_slug: slug, data, updated_at })
+      .onConflict((oc) => oc.column('trip_slug').doUpdateSet({ data, updated_at }))
+      .execute();
   }
 
-  /** Copie aussi GPX et cache. Le lien Obsidian n'est pas repris : la copie ne doit pas écraser le carnet de l'original. */
+  /** Copie aussi GPX et caches. Le lien Obsidian n'est pas repris : la copie ne doit pas écraser le carnet de l'original. */
   async duplicate(slug: string): Promise<Trip> {
     const source = await this.get(slug);
     const name = `${source.name} (copie)`;
     const newSlug = await this.reserveSlug(name);
-    await cp(path.join(this.dir, slug), path.join(this.dir, newSlug), { recursive: true });
+    const sourceDir = path.join(this.dir, slug);
+    if (existsSync(sourceDir)) {
+      await cp(sourceDir, path.join(this.dir, newSlug), { recursive: true });
+    }
     const now = new Date().toISOString();
     const copy: Trip = {
       ...source,
@@ -254,14 +307,31 @@ export class TripStore {
       updatedAt: now,
     };
     await this.writeTrip(copy);
+    const routes = await this.readRouteCache(slug);
+    if (Object.keys(routes).length > 0) await this.writeRouteCache(newSlug, routes);
+    const pois = await this.readPoiCache(slug);
+    if (pois) await this.writePoiCache(newSlug, pois);
     return copy;
   }
 
+  /** Déplace les fichiers du voyage et un cliché JSON dans `.trash/` et retire le voyage de SQLite. */
   async trash(slug: string): Promise<void> {
-    await this.get(slug);
+    const trip = await this.get(slug);
     const trashDir = path.join(this.dir, '.trash');
     await mkdir(trashDir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    await rename(path.join(this.dir, slug), path.join(trashDir, `${slug}-${stamp}`));
+    const target = path.join(trashDir, `${slug}-${stamp}`);
+    const sourceDir = path.join(this.dir, slug);
+    if (existsSync(sourceDir)) {
+      await rename(sourceDir, target);
+    } else {
+      await mkdir(target, { recursive: true });
+    }
+    await writeAtomic(path.join(target, 'trip.json'), `${JSON.stringify(trip, null, 2)}\n`);
+    await this.userDb.db.transaction().execute(async (trx) => {
+      await trx.deleteFrom('trips').where('slug', '=', slug).execute();
+      await trx.deleteFrom('route_cache').where('trip_slug', '=', slug).execute();
+      await trx.deleteFrom('poi_cache').where('trip_slug', '=', slug).execute();
+    });
   }
 }

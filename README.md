@@ -79,7 +79,7 @@ trips/      données utilisateur
 | Sujet | Fichiers |
 | --- | --- |
 | Modèle de données | `shared/schema.ts` |
-| Stockage | `server/trip-store.ts`, `server/settings-store.ts` |
+| Stockage | `server/db.ts` (SQLite `better-sqlite3` + Kysely), `server/trip-store.ts`, `server/settings-store.ts` |
 | Routes | `server/app.ts` |
 | Trajets | `shared/itinerary.ts`, `server/routing.ts` |
 | Bibliothèque | `shared/library.ts`, `server/library-store.ts`, `src/pages/LibraryPage.tsx` |
@@ -90,9 +90,7 @@ trips/      données utilisateur
 | Vue voyage | `src/pages/TripPage.tsx` |
 | Assistant | `shared/assistant-ops.ts`, `shared/plan-impact.ts`, `server/assistant.ts`, et par fournisseur `server/assistant-anthropic.ts`, `server/assistant-openai.ts` |
 
-Chaque voyage vit dans `trips/<slug>/` : `trip.json` lisible et diffable, `gpx/` pour les fichiers originaux, `cache/` pour les trajets et les points utiles. Les champs ajoutés après M0 sont optionnels, les anciens voyages restent lisibles sans migration.
-
-Les activités enregistrées (intégration AllTrails, en cours) vivent dans `trips/.activities/` : `activities.json` et `gpx/<id>.gpx`, copie octet pour octet du fichier importé.
+Les données utilisateur (voyages, caches trajets/POI, bibliothèque, sorties enregistrées, registre de synchronisation et réglages) sont stockées dans SQLite (`trips/itinera.db`, mode WAL, via `better-sqlite3` + Kysely). Les fichiers GPX originaux restent intacts sur disque et indexés par empreinte SHA-256 dans le coffre immuable `trips/.gpx-vault/`. Au premier démarrage sur un ancien dossier JSON, une migration unique importe automatiquement les données existantes sans modifier ni supprimer les fichiers JSON d'origine (conservés en sauvegarde).
 
 ### Activités enregistrées : API, unités et règles
 
