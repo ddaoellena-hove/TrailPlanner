@@ -631,3 +631,113 @@ export const HealthSchema = z.object({
   assistantProviders: z.array(AssistantProviderIdSchema),
 });
 export type Health = z.infer<typeof HealthSchema>;
+
+/** Pondération de l'intention de découverte (tous les poids dans [0, 1]). */
+export const DiscoveryIntentSchema = z.object({
+  scenic: z.number().min(0).max(1).default(0.5),
+  isolation: z.number().min(0).max(1).default(0.5),
+  heritage: z.number().min(0).max(1).default(0.3),
+  novelty: z.number().min(0).max(1).default(0.4),
+});
+export type DiscoveryIntent = z.infer<typeof DiscoveryIntentSchema>;
+
+/** Requête de découverte de boucles autour d'une origine (Phase 3, sans LLM). */
+export const DiscoveryQuerySchema = z
+  .object({
+    origin: LatLngSchema,
+    maxDriveMin: z.number().min(5).max(180).default(45),
+    minDistanceKm: z.number().min(0.5).max(100).default(5),
+    maxDistanceKm: z.number().min(0.5).max(100).default(15),
+    maxElevationGainM: z.number().nonnegative().optional(),
+    maxDurationMin: z.number().positive().optional(),
+    maxPavedRatio: z.number().min(0).max(1).optional(),
+    withDog: z.boolean().default(false),
+    loopsOnly: z.boolean().default(true),
+    intent: DiscoveryIntentSchema.optional(),
+    limit: z.number().int().min(1).max(30).default(10),
+    diversityLambda: z.number().min(0).max(1).default(0.72),
+  })
+  .refine((q) => q.maxDistanceKm >= q.minDistanceKm, {
+    message: 'La distance maximale doit être supérieure ou égale à la distance minimale',
+    path: ['maxDistanceKm'],
+  });
+export type DiscoveryQuery = z.infer<typeof DiscoveryQuerySchema>;
+
+export const UncertaintyCodeSchema = z.enum([
+  'DOG_ACCESS_UNKNOWN',
+  'RESERVE_REGULATION_CHECK',
+  'OSM_SURFACE_INCOMPLETE',
+  'OSM_GEOMETRY_INCOMPLETE',
+  'ACCESS_RESTRICTED',
+  'ELEVATION_MISSING',
+]);
+
+export const SuggestionResultSchema = z.object({
+  trailId: z.string().min(1),
+  osmRelationId: z.number().int().nullable(),
+  sourceType: z.enum(['osm_relation', 'generated_loop']),
+  name: z.string().min(1),
+  kind: z.enum(['loop', 'out-and-back', 'point-to-point']),
+  distanceMeters: z.number().int().nonnegative(),
+  elevationGainMeters: z.number().int().nonnegative().nullable(),
+  elevationLossMeters: z.number().int().nonnegative().nullable(),
+  estimatedDurationMin: z.number().nonnegative(),
+  difficulty: z.enum(['easy', 'moderate', 'hard']),
+  pavedRatio: z.number().min(0).max(1),
+  surfaceUnknownRatio: z.number().min(0).max(1),
+  dogPolicy: z.enum(['allowed', 'leashed', 'forbidden', 'unknown']),
+  inReserve: z.boolean(),
+  start: LatLngSchema,
+  estimatedDriveMin: z.number().nonnegative(),
+  geometry: z.object({
+    type: z.literal('LineString'),
+    coordinates: z.array(z.tuple([z.number(), z.number()])),
+  }),
+  scores: z.object({
+    total: z.number().min(0).max(1),
+    scenic: z.number().min(0).max(1),
+    isolation: z.number().min(0).max(1),
+    heritage: z.number().min(0).max(1),
+    novelty: z.number().min(0).max(1),
+    pavedPenalty: z.number().min(0).max(1),
+  }),
+  noveltyStatus: z.enum(['new', 'done_before', 'rejected_before']),
+  explanation: z.object({
+    positives: z.array(z.string()),
+    tradeoffs: z.array(z.string()),
+    uncertainties: z.array(UncertaintyCodeSchema),
+  }),
+  provenance: z.object({
+    snapshotId: z.string(),
+    regionName: z.string(),
+    sources: z.array(z.string()),
+    sourceType: z.enum(['osm_relation', 'generated_loop']),
+    osmRelationId: z.number().int().nullable(),
+  }),
+});
+export type SuggestionResult = z.infer<typeof SuggestionResultSchema>;
+
+export const DiscoveryResponseSchema = z.object({
+  totalMatching: z.number().int().nonnegative(),
+  isochroneSource: z.enum(['ign', 'radius-fallback']),
+  snapshotId: z.string(),
+  suggestions: z.array(SuggestionResultSchema),
+});
+export type DiscoveryResponse = z.infer<typeof DiscoveryResponseSchema>;
+
+export const SuggestionFeedbackVerdictSchema = z.enum(['saved', 'liked', 'dismissed']);
+export type SuggestionFeedbackVerdict = z.infer<typeof SuggestionFeedbackVerdictSchema>;
+
+export const NewSuggestionFeedbackSchema = z.object({
+  trailId: z.string().min(1),
+  origin: LatLngSchema,
+  verdict: SuggestionFeedbackVerdictSchema,
+  reason: z.string().trim().max(200).optional(),
+});
+export type NewSuggestionFeedback = z.infer<typeof NewSuggestionFeedbackSchema>;
+
+export const SuggestionFeedbackSchema = NewSuggestionFeedbackSchema.extend({
+  id: z.uuid(),
+  createdAt: IsoDateTimeSchema,
+});
+export type SuggestionFeedback = z.infer<typeof SuggestionFeedbackSchema>;

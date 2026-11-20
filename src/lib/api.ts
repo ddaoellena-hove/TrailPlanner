@@ -20,6 +20,9 @@ import {
   ChargingSearchSchema,
   type DayWeather,
   DayWeatherSchema,
+  type DiscoveryQuery,
+  type DiscoveryResponse,
+  DiscoveryResponseSchema,
   type GeocodeResult,
   GeocodeResultSchema,
   type Health,
@@ -36,6 +39,7 @@ import {
   type LibraryLinks,
   LibraryLinksSchema,
   type NewOuting,
+  type NewSuggestionFeedback,
   type NewTrip,
   type ObsidianActivityExportRequest,
   type ObsidianActivityPreview,
@@ -49,6 +53,8 @@ import {
   PoiSchema,
   type Settings,
   SettingsSchema,
+  type SuggestionFeedback,
+  SuggestionFeedbackSchema,
   type Trip,
   TripSchema,
   type TripSummary,
@@ -364,5 +370,29 @@ export const api = {
 
   async deleteTrip(slug: string): Promise<void> {
     await request(`/trips/${slug}`, { method: 'DELETE' });
+  },
+
+  async discover(query: Partial<DiscoveryQuery> & Pick<DiscoveryQuery, 'origin'>): Promise<DiscoveryResponse> {
+    const response = await request('/discover', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(query),
+    });
+    return DiscoveryResponseSchema.parse(await response.json());
+  },
+
+  async listDiscoveryFeedback(): Promise<SuggestionFeedback[]> {
+    return z
+      .array(SuggestionFeedbackSchema)
+      .parse(await (await request('/discover/feedback')).json());
+  },
+
+  async addDiscoveryFeedback(input: NewSuggestionFeedback): Promise<SuggestionFeedback> {
+    const response = await request('/discover/feedback', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    return SuggestionFeedbackSchema.parse(await response.json());
   },
 };

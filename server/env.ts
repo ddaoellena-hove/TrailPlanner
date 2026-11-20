@@ -15,6 +15,10 @@ export const env = {
   openaiApiKey: process.env.OPENAI_API_KEY || undefined,
   openaiModel: process.env.OPENAI_MODEL || undefined,
   obsidianVaultDir: process.env.OBSIDIAN_VAULT_DIR || undefined,
+  catalogPath: path.resolve(
+    rootDir,
+    process.env.CATALOG_DB_PATH || './data-pipeline/data/catalog_v0.duckdb',
+  ),
   tripsDir: path.resolve(rootDir, process.env.TRIPS_DIR || './trips'),
   settingsFile: path.resolve(rootDir, process.env.SETTINGS_FILE || './settings.json'),
 };

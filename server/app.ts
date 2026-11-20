@@ -5,9 +5,11 @@ import { stream } from 'hono/streaming';
 import { z } from 'zod';
 import {
   DEFAULT_SETTINGS,
+  DiscoveryQuerySchema,
   type Health,
   LibraryHikeFieldsSchema,
   NewOutingSchema,
+  NewSuggestionFeedbackSchema,
   NewTripSchema,
   ObsidianActivityExportRequestSchema,
   ObsidianTripExportRequestSchema,
@@ -16,6 +18,7 @@ import {
   TripSchema,
 } from '../shared/schema';
 import { computeAlerts } from '../shared/alerts';
+import { discoverTrails } from '../shared/discovery';
 import { LibraryHikeNotFoundError, LibraryStore } from './library-store';
 import { describeTrip } from '../shared/assistant-context';
 import { CARNET_TITLE, buildCarnet, carnetOutcome, carnetToMarkdown } from '../shared/carnet';
@@ -53,7 +56,9 @@ import {
 import { computeItinerary } from './routing';
 import { SettingsStore } from './settings-store';
 import { TripNotFoundError, TripStore } from './trip-store';
+import type { CatalogSource } from './catalog-reader';
 import { UserDb } from './db';
+import { FeedbackStore } from './feedback-store';
 
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost']);
 
@@ -72,6 +77,7 @@ type AppOptions = {
   orsApiKey?: string;
   openChargeMapKey?: string;
   obsidianVaultDir?: string;
+  catalog?: CatalogSource;
   assistants?: AssistantProvider[];
   /** Démarre les passages automatiques du dossier surveillé (le serveur, pas les tests). */
   autoSync?: boolean;
@@ -84,6 +90,7 @@ export function createApp({
   orsApiKey,
   openChargeMapKey,
   obsidianVaultDir,
+  catalog,
   assistants = [],
   autoSync = false,
 }: AppOptions) {
@@ -93,6 +100,7 @@ export function createApp({
   const activities = new ActivityStore(userDb);
   const sync = new ActivitySync(userDb, activities);
   const settings = new SettingsStore(userDb);
+  const feedbacks = new FeedbackStore(userDb);
   if (autoSync) new AutoSync(sync, () => settings.read()).start();
   const app = new Hono();
 
@@ -550,6 +558,51 @@ export function createApp({
         : body.data.projectName;
     const exported = await exportActivityToObsidian(vaultDir, activity, entry, projectName);
     return c.json(await activities.setObsidian(activity.id, exported));
+  });
+
+  /** Découverte de boucles autour d'une origine : filtre → nouveauté → score → MMR → explication (sans LLM). */
+  app.post('/api/discover', async (c) => {
+    if (!catalog) {
+      return c.json({ error: 'Catalogue de découverte non configuré' }, 503);
+    }
+    const body = DiscoveryQuerySchema.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      return c.json({ error: body.error.issues[0]?.message ?? 'Requête de découverte invalide' }, 400);
+    }
+    const loaded = await catalog.load();
+    if (!loaded) {
+      return c.json(
+        { error: 'Catalogue absent : construisez-le d’abord avec `npm run catalog:build`' },
+        503,
+      );
+    }
+    const [isochrone, doneActivities, pastFeedbacks] = await Promise.all([
+      catalog.fetchIsochrone(body.data.origin, body.data.maxDriveMin),
+      activities.list(),
+      feedbacks.list(),
+    ]);
+    const result = discoverTrails(loaded.trails, body.data, {
+      meta: loaded.meta,
+      activities: doneActivities,
+      feedbacks: pastFeedbacks,
+      isochrone,
+    });
+    return c.json({
+      totalMatching: result.totalMatching,
+      isochroneSource: isochrone ? 'ign' : 'radius-fallback',
+      snapshotId: loaded.meta.snapshotId,
+      suggestions: result.suggestions,
+    });
+  });
+
+  app.get('/api/discover/feedback', async (c) => c.json(await feedbacks.list()));
+
+  app.post('/api/discover/feedback', async (c) => {
+    const body = NewSuggestionFeedbackSchema.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      return c.json({ error: body.error.issues[0]?.message ?? 'Avis invalide' }, 400);
+    }
+    return c.json(await feedbacks.add(body.data), 201);
   });
 
   return app;

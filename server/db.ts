@@ -82,6 +82,16 @@ export interface GpxVaultTable {
   created_at: string;
 }
 
+export interface SuggestionFeedbackTable {
+  id: string;
+  trail_id: string;
+  origin_lat: number;
+  origin_lng: number;
+  verdict: string;
+  reason: string | null;
+  created_at: string;
+}
+
 export interface ItineraDatabase {
   meta: MetaTable;
   settings: SettingsTable;
@@ -92,6 +102,7 @@ export interface ItineraDatabase {
   activities: ActivitiesTable;
   activity_sync: ActivitySyncTable;
   gpx_vault: GpxVaultTable;
+  suggestion_feedback: SuggestionFeedbackTable;
 }
 
 export const DB_FILE_NAME = 'itinera.db';
@@ -165,6 +176,15 @@ const SCHEMA_STATEMENTS = [
     relative_path TEXT NOT NULL,
     byte_size INTEGER NOT NULL,
     original_file_name TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS suggestion_feedback (
+    id TEXT PRIMARY KEY,
+    trail_id TEXT NOT NULL,
+    origin_lat REAL NOT NULL,
+    origin_lng REAL NOT NULL,
+    verdict TEXT NOT NULL,
+    reason TEXT,
     created_at TEXT NOT NULL
   )`,
 ];
