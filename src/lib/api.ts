@@ -10,6 +10,11 @@ import {
   type ActivityPreview,
   ActivityPreviewSchema,
   ActivitySchema,
+  type AddEscapadeToTripRequest,
+  type AddEscapadeToTripResponse,
+  AddEscapadeToTripResponseSchema,
+  type BonusStop,
+  BonusStopSchema,
   type ChargingSearch,
   type SyncFile,
   SyncFileSchema,
@@ -23,12 +28,15 @@ import {
   type DiscoveryQuery,
   type DiscoveryResponse,
   DiscoveryResponseSchema,
+  type Escapade,
+  EscapadeSchema,
   type GeocodeResult,
   GeocodeResultSchema,
   type Health,
   HealthSchema,
   type Hike,
   HikeSchema,
+  type LatLng,
   type MapLinkResult,
   MapLinkResultSchema,
   type Itinerary,
@@ -38,6 +46,7 @@ import {
   LibraryHikeSchema,
   type LibraryLinks,
   LibraryLinksSchema,
+  type NewEscapade,
   type NewOuting,
   type NewSuggestionFeedback,
   type NewTrip,
@@ -394,5 +403,54 @@ export const api = {
       body: JSON.stringify(input),
     });
     return SuggestionFeedbackSchema.parse(await response.json());
+  },
+
+  async bonusStops(trailStart: LatLng, origin: LatLng): Promise<BonusStop[]> {
+    const params = new URLSearchParams({
+      lat: String(trailStart.lat),
+      lng: String(trailStart.lng),
+      originLat: String(origin.lat),
+      originLng: String(origin.lng),
+    });
+    const response = await request(`/discover/bonus-stops?${params.toString()}`);
+    return z.array(BonusStopSchema).parse(await response.json());
+  },
+
+  async listEscapades(): Promise<Escapade[]> {
+    return z.array(EscapadeSchema).parse(await (await request('/escapades')).json());
+  },
+
+  async createEscapade(input: NewEscapade): Promise<Escapade> {
+    const response = await request('/escapades', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    return EscapadeSchema.parse(await response.json());
+  },
+
+  async updateEscapade(id: string, input: NewEscapade): Promise<Escapade> {
+    const response = await request(`/escapades/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    return EscapadeSchema.parse(await response.json());
+  },
+
+  async deleteEscapade(id: string): Promise<void> {
+    await request(`/escapades/${id}`, { method: 'DELETE' });
+  },
+
+  async addEscapadeToTrip(
+    id: string,
+    body: AddEscapadeToTripRequest,
+  ): Promise<AddEscapadeToTripResponse> {
+    const response = await request(`/escapades/${id}/add-to-trip`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return AddEscapadeToTripResponseSchema.parse(await response.json());
   },
 };

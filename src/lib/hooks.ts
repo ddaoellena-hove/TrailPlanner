@@ -6,7 +6,7 @@ import {
 } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { DEFAULT_FAVORITE_NETWORKS, rankStations } from '../../shared/charging-networks';
-import { DEFAULT_SETTINGS, type Poi, type Settings, type Trip } from '../../shared/schema';
+import { DEFAULT_SETTINGS, type LatLng, type Poi, type Settings, type Trip } from '../../shared/schema';
 import { api } from './api';
 
 export const POI_LABELS: Record<Poi['kind'], string> = {
@@ -35,6 +35,23 @@ export function useItinerary(trip: Trip) {
 
 export function useActivities() {
   return useQuery({ queryKey: ['activities'], queryFn: api.listActivities });
+}
+
+export function useEscapades() {
+  return useQuery({ queryKey: ['escapades'], queryFn: api.listEscapades });
+}
+
+export function useBonusStops(trailStart: LatLng | null, origin: LatLng | null) {
+  return useQuery({
+    queryKey: [
+      'bonus-stops',
+      trailStart ? `${trailStart.lat.toFixed(4)},${trailStart.lng.toFixed(4)}` : null,
+      origin ? `${origin.lat.toFixed(4)},${origin.lng.toFixed(4)}` : null,
+    ],
+    queryFn: () => api.bonusStops(trailStart!, origin!),
+    enabled: Boolean(trailStart && origin),
+    staleTime: 5 * 60_000,
+  });
 }
 
 /** La trace d'une sortie ne change jamais : le GPX original n'est pas modifié. */

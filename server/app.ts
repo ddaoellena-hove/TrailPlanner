@@ -1,24 +1,35 @@
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
 import { z } from 'zod';
 import {
+  AddEscapadeToTripRequestSchema,
   DEFAULT_SETTINGS,
   DiscoveryQuerySchema,
   type Health,
   LibraryHikeFieldsSchema,
+  NewEscapadeSchema,
   NewOutingSchema,
   NewSuggestionFeedbackSchema,
   NewTripSchema,
   ObsidianActivityExportRequestSchema,
   ObsidianTripExportRequestSchema,
+  type Place,
   SettingsSchema,
   SlugSchema,
+  type Stop,
   TripSchema,
 } from '../shared/schema';
 import { computeAlerts } from '../shared/alerts';
 import { discoverTrails } from '../shared/discovery';
+import {
+  BONUS_CATEGORY_LABELS,
+  findBonusStops,
+  mapCatalogDogPolicy,
+  suggestionToGpxXml,
+} from '../shared/escapade';
 import { LibraryHikeNotFoundError, LibraryStore } from './library-store';
 import { describeTrip } from '../shared/assistant-context';
 import { CARNET_TITLE, buildCarnet, carnetOutcome, carnetToMarkdown } from '../shared/carnet';
@@ -58,6 +69,7 @@ import { SettingsStore } from './settings-store';
 import { TripNotFoundError, TripStore } from './trip-store';
 import type { CatalogSource } from './catalog-reader';
 import { UserDb } from './db';
+import { EscapadeNotFoundError, EscapadeStore } from './escapade-store';
 import { FeedbackStore } from './feedback-store';
 
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost']);
@@ -101,6 +113,7 @@ export function createApp({
   const sync = new ActivitySync(userDb, activities);
   const settings = new SettingsStore(userDb);
   const feedbacks = new FeedbackStore(userDb);
+  const escapades = new EscapadeStore(userDb);
   if (autoSync) new AutoSync(sync, () => settings.read()).start();
   const app = new Hono();
 
@@ -142,6 +155,9 @@ export function createApp({
       return c.json({ error: error.message, duplicate: error.duplicate }, 409);
     }
     if (error instanceof TripNotFoundError) return c.json({ error: 'Voyage introuvable' }, 404);
+    if (error instanceof EscapadeNotFoundError) {
+      return c.json({ error: 'Escapade introuvable' }, 404);
+    }
     if (error instanceof LibraryHikeNotFoundError) {
       return c.json({ error: 'Rando introuvable' }, 404);
     }
@@ -603,6 +619,152 @@ export function createApp({
       return c.json({ error: body.error.issues[0]?.message ?? 'Avis invalide' }, 400);
     }
     return c.json(await feedbacks.add(body.data), 201);
+  });
+
+  /** Étapes bonus (< 15 min de détour) issues des lieux du catalogue autour d'une boucle. */
+  app.get('/api/discover/bonus-stops', async (c) => {
+    const params = z
+      .object({
+        lat: z.coerce.number().min(-90).max(90),
+        lng: z.coerce.number().min(-180).max(180),
+        originLat: z.coerce.number().min(-90).max(90),
+        originLng: z.coerce.number().min(-180).max(180),
+      })
+      .safeParse({
+        lat: c.req.query('lat'),
+        lng: c.req.query('lng'),
+        originLat: c.req.query('originLat'),
+        originLng: c.req.query('originLng'),
+      });
+    if (!params.success) return c.json({ error: 'Coordonnées invalides' }, 400);
+    if (!catalog) return c.json([]);
+    const loaded = await catalog.load();
+    if (!loaded || !loaded.places?.length) return c.json([]);
+    const stops = findBonusStops(
+      { lat: params.data.lat, lng: params.data.lng },
+      { lat: params.data.originLat, lng: params.data.originLng },
+      loaded.places,
+    );
+    return c.json(stops);
+  });
+
+  app.get('/api/escapades', async (c) => c.json(await escapades.list()));
+
+  app.post('/api/escapades', async (c) => {
+    const body = NewEscapadeSchema.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      return c.json({ error: body.error.issues[0]?.message ?? 'Escapade invalide' }, 400);
+    }
+    const created = await escapades.create(body.data);
+    try {
+      await feedbacks.add({
+        trailId: created.suggestion.trailId,
+        origin: created.origin.location,
+        verdict: 'saved',
+      });
+    } catch {
+      // L'escapade est bien enregistrée : l'avis ne doit pas faire échouer la sauvegarde.
+    }
+    return c.json(created, 201);
+  });
+
+  app.get('/api/escapades/:id', async (c) => c.json(await escapades.get(c.req.param('id'))));
+
+  app.put('/api/escapades/:id', async (c) => {
+    const body = NewEscapadeSchema.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      return c.json({ error: body.error.issues[0]?.message ?? 'Escapade invalide' }, 400);
+    }
+    return c.json(await escapades.update(c.req.param('id'), body.data));
+  });
+
+  app.delete('/api/escapades/:id', async (c) => {
+    await escapades.remove(c.req.param('id'));
+    return c.body(null, 204);
+  });
+
+  /** Convertit une escapade enregistrée en rando (+ étape bonus éventuelle) dans un voyage existant. */
+  app.post('/api/escapades/:id/add-to-trip', async (c) => {
+    const body = AddEscapadeToTripRequestSchema.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      return c.json({ error: body.error.issues[0]?.message ?? 'Requête invalide' }, 400);
+    }
+    const escapade = await escapades.get(c.req.param('id'));
+    const trip = await store.get(body.data.tripSlug);
+    const day = trip.days.find((d) => d.index === body.data.dayIndex);
+    if (!day) {
+      return c.json({ error: `Jour ${body.data.dayIndex} introuvable dans ce voyage` }, 400);
+    }
+
+    const gpxXml = suggestionToGpxXml(escapade.suggestion);
+    const bytes = Buffer.from(gpxXml, 'utf8');
+    const imported = await store.importGpx(trip.slug, {
+      pace: (await settings.read()).pace,
+      bytes,
+      fileName: `${escapade.suggestion.trailId}.gpx`,
+      name: escapade.suggestion.name,
+    });
+
+    const noteParts = [
+      `Importée depuis l'escapade « ${escapade.title} » (${escapade.suggestion.provenance.sources.join(' · ')})`,
+      ...(escapade.notes ? [escapade.notes] : []),
+    ];
+    const hike = {
+      ...imported,
+      dogPolicy: mapCatalogDogPolicy(escapade.suggestion.dogPolicy),
+      // Conserve le D+/D− mesuré sur IGN RGE ALTI quand le GPX synthétisé n'a pas d'altitude.
+      stats: {
+        ...imported.stats,
+        elevationGainM:
+          imported.stats.elevationGainM ?? escapade.suggestion.elevationGainMeters,
+        elevationLossM:
+          imported.stats.elevationLossM ?? escapade.suggestion.elevationLossMeters,
+      },
+      notes: noteParts.join('\n\n'),
+    };
+    try {
+      await library.add(hike, bytes);
+    } catch (error) {
+      console.warn('Rando d’escapade non ajoutée à la bibliothèque :', error);
+    }
+
+    const newStops: Stop[] = [
+      {
+        id: randomUUID(),
+        kind: 'hike',
+        hikeId: hike.id,
+        startTime: escapade.startTime,
+      },
+    ];
+    const newPlaces: Place[] = [];
+
+    if (escapade.bonusStop) {
+      const bonusPlace: Place = {
+        id: randomUUID(),
+        type: 'poi',
+        name: escapade.bonusStop.name,
+        location: escapade.bonusStop.location,
+        notes: `${BONUS_CATEGORY_LABELS[escapade.bonusStop.category]} (+${escapade.bonusStop.detourMin} min de détour) — ${escapade.bonusStop.attribution}`,
+      };
+      newPlaces.push(bonusPlace);
+      newStops.push({
+        id: randomUUID(),
+        kind: 'place',
+        placeId: bonusPlace.id,
+        durationMin: escapade.bonusDurationMin,
+      });
+    }
+
+    const updatedTrip = {
+      ...trip,
+      hikes: [...trip.hikes, hike],
+      places: [...trip.places, ...newPlaces],
+      days: trip.days.map((d) =>
+        d.index === day.index ? { ...d, stops: [...d.stops, ...newStops] } : d,
+      ),
+    };
+    const saved = await store.save(updatedTrip);
+    return c.json({ trip: saved, hike }, 201);
   });
 
   return app;
