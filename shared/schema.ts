@@ -108,7 +108,7 @@ export type LibraryHikeFields = z.infer<typeof LibraryHikeFieldsSchema>;
 export const LibraryLinksSchema = z.record(z.string(), z.string());
 export type LibraryLinks = z.infer<typeof LibraryLinksSchema>;
 
-/** `calculated` : déduit de la trace par TrailPlanner ; `source` : lu tel quel dans le fichier. */
+/** `calculated` : déduit de la trace par Itinera ; `source` : lu tel quel dans le fichier. */
 export const MetricOriginSchema = z.enum(['calculated', 'source']);
 export type MetricOrigin = z.infer<typeof MetricOriginSchema>;
 

@@ -9,9 +9,9 @@ Exports GPX réels d'AllTrails (activité enregistrée, pas l'itinéraire), copi
 | `sur-les-traces-de-voltaire.gpx` | 14 novembre 2026 | 6,81 km | 85 m | 1 h 25 | 1 h 24 |
 | `vallee-du-crevon.gpx` | 15 novembre 2026 | 7,65 km | 169 m | 1 h 36 | 1 h 36 |
 
-Tolérances vérifiées par `server/recordings.test.ts` : distance ±2 %, D+ ±10 %, temps total à la minute près. TrailPlanner ne calcule pas le temps en mouvement.
+Tolérances vérifiées par `server/recordings.test.ts` : distance ±2 %, D+ ±10 %, temps total à la minute près. Itinera ne calcule pas le temps en mouvement.
 
-Valeurs calculées par TrailPlanner (seuil de dénivelé de 2 m des sorties enregistrées) : Voltaire 6,80 km, +87 m, 1 h 25 ; Vallée du Crevon 7,64 km, +162 m, 1 h 36. Deux sorties de plaine en Normandie : une sortie de montagne reste à ajouter.
+Valeurs calculées par Itinera (seuil de dénivelé de 2 m des sorties enregistrées) : Voltaire 6,80 km, +87 m, 1 h 25 ; Vallée du Crevon 7,64 km, +162 m, 1 h 36. Deux sorties de plaine en Normandie : une sortie de montagne reste à ajouter.
 
 ## Itinéraires (US1)
 

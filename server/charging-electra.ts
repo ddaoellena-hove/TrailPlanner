@@ -76,7 +76,7 @@ export async function electraStations(apiKey: string): Promise<ChargingStation[]
     verbose: 'false',
   });
   const response = await fetch(`${OCM_URL}?${params}`, {
-    headers: { 'x-api-key': apiKey, 'user-agent': 'TrailPlanner/0.1' },
+    headers: { 'x-api-key': apiKey, 'user-agent': 'Itinera/0.1' },
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`Open Charge Map : ${response.status}`);

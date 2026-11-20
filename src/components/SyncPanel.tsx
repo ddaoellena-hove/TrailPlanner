@@ -60,7 +60,7 @@ function FolderForm({ initial, onDone }: { initial: string; onDone: () => void }
         )}
       </div>
       <p className="text-xs text-muted-foreground">
-        TrailPlanner lit les fichiers .gpx de ce dossier sans jamais les modifier, les déplacer ni
+        Itinera lit les fichiers .gpx de ce dossier sans jamais les modifier, les déplacer ni
         les supprimer. Laissez vide pour arrêter la synchronisation.
       </p>
       {error && (
@@ -194,7 +194,7 @@ export function SyncPanel({
           {!folder && (
             <p className="text-sm text-muted-foreground">
               AllTrails ne permet pas de récupérer vos sorties automatiquement. Exportez-les en GPX
-              dans un dossier : TrailPlanner importera les nouvelles à chaque synchronisation.
+              dans un dossier : Itinera importera les nouvelles à chaque synchronisation.
             </p>
           )}
           <FolderForm initial={folder ?? ''} onDone={() => setEditing(false)} />

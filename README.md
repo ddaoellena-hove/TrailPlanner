@@ -1,4 +1,4 @@
-# TrailPlanner
+# Itinera
 
 Outil local et mono-utilisateur pour préparer un road trip de plusieurs jours mêlant voiture et randonnées, à partir de GPX AllTrails. Il calcule la charge de chaque journée, signale ce qui ne tient pas et exporte un carnet dans le Life OS Notion.
 

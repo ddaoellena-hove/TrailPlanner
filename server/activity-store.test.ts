@@ -27,7 +27,7 @@ describe('ActivityStore', () => {
   const root = () => path.join(dir, '.activities');
 
   beforeEach(async () => {
-    dir = await mkdtemp(path.join(tmpdir(), 'trailplanner-activities-'));
+    dir = await mkdtemp(path.join(tmpdir(), 'itinera-activities-'));
     store = new ActivityStore(dir);
   });
 
