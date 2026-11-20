@@ -4,7 +4,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', 'trips', '.e2e-trips', 'playwright-report', 'test-results'] },
+  { ignores: ['dist', 'node_modules', 'trips', '.e2e-trips', 'playwright-report', 'test-results', 'data-pipeline/data'] },
   js.configs.recommended,
   tseslint.configs.recommended,
   {
@@ -14,7 +14,7 @@ export default tseslint.config(
     languageOptions: { globals: globals.browser },
   },
   {
-    files: ['server/**/*.ts', 'shared/**/*.ts', 'e2e/**/*.ts', '*.ts'],
+    files: ['server/**/*.ts', 'data-pipeline/**/*.ts', 'shared/**/*.ts', 'e2e/**/*.ts', '*.ts'],
     languageOptions: { globals: globals.node },
   },
 );

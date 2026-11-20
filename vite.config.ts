@@ -14,5 +14,5 @@ export default defineConfig({
     strictPort: true,
     proxy: { '/api': `http://127.0.0.1:${process.env.API_PORT ?? 5174}` },
   },
-  test: { include: ['shared/**/*.test.ts', 'server/**/*.test.ts'] },
+  test: { include: ['shared/**/*.test.ts', 'server/**/*.test.ts', 'data-pipeline/**/*.test.ts'] },
 });

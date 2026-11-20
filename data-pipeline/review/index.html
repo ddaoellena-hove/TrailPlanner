@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Revue du catalogue</title>
+  <link rel="stylesheet" href="/lib/maplibre-gl.css" />
+  <style>
+    :root {
+      --bg: #fafaf9; --panel: #ffffff; --text: #1c1917; --muted: #78716c; --border: #e7e5e4;
+      --accent: #15803d; --no: #b91c1c; --sel: #f0fdf4; --warn: #a16207;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.4 system-ui, -apple-system, sans-serif; color: var(--text); background: var(--bg);
+      display: grid; grid-template-columns: minmax(340px, 440px) 1fr; height: 100vh; }
+    aside { display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--panel); min-height: 0; }
+    header { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+    h1 { font-size: 16px; margin: 0 0 4px; }
+    .hint { color: var(--muted); font-size: 12px; margin: 0; }
+    .tabs { display: flex; gap: 4px; margin-top: 10px; }
+    .tabs button { flex: 1; padding: 6px; border: 1px solid var(--border); background: var(--bg); border-radius: 6px; cursor: pointer; font: inherit; }
+    .tabs button[aria-selected="true"] { background: var(--text); color: #fff; border-color: var(--text); }
+    #list { overflow-y: auto; padding: 8px; flex: 1; }
+    .card { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; background: var(--panel); }
+    .card.selected { border-color: var(--accent); background: var(--sel); }
+    .card h2 { font-size: 14px; margin: 0 0 4px; display: flex; gap: 6px; align-items: baseline; }
+    .rank { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .stats { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .bars { display: flex; gap: 10px; font-size: 12px; margin: 6px 0; }
+    .bar { flex: 1; } .bar span { display: block; height: 4px; background: var(--border); border-radius: 2px; margin-top: 2px; }
+    .bar span i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
+    .flags { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+    .flag { font-size: 11px; color: var(--warn); border: 1px solid #fde68a; background: #fffbeb; border-radius: 4px; padding: 0 5px; }
+    .actions { display: flex; gap: 6px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+    .actions button { font: inherit; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); cursor: pointer; }
+    .actions button.yes[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .actions button.no[aria-pressed="true"] { background: var(--no); color: #fff; border-color: var(--no); }
+    .actions select { font: inherit; padding: 3px; border-radius: 6px; border: 1px solid var(--border); }
+    .actions a { margin-left: auto; color: var(--muted); font-size: 12px; }
+    #map { height: 100vh; }
+    @media (max-width: 760px) { body { grid-template-columns: 1fr; grid-template-rows: 45vh 1fr; } #map { height: 45vh; grid-row: 1; } }
+  </style>
+</head>
+<body>
+  <aside>
+    <header>
+      <h1>Revue du catalogue — phase 0</h1>
+      <p class="hint">Pour chaque boucle : irais-tu la faire ? Les avis comptent pour le benchmark B2 (seuil : 60 % de « J'irais »).</p>
+      <div class="tabs" role="tablist" id="tabs"></div>
+      <p class="hint" id="progress" style="margin-top:8px"></p>
+    </header>
+    <div id="list"></div>
+  </aside>
+  <div id="map"></div>
+
+  <script type="module">
+    import * as maplibregl from '/lib/maplibre-gl.mjs';
+
+    const UNCERTAINTY = {
+      DOG_ACCESS_UNKNOWN: 'Chiens : non renseigné',
+      RESERVE_REGULATION_CHECK: 'Réserve : vérifier la réglementation',
+      OSM_SURFACE_INCOMPLETE: 'Revêtement en partie inconnu',
+      OSM_GEOMETRY_INCOMPLETE: 'Tracé OSM incomplet',
+      ACCESS_RESTRICTED: 'Tronçon à accès restreint',
+      ELEVATION_MISSING: 'Altitude manquante',
+    };
+    const REASONS = ['Trop de route', 'Trop urbain', 'Sans intérêt', 'Déjà faite', 'Trop loin', 'Tracé douteux', 'Autre'];
+    const KIND = { loop: 'boucle', 'out-and-back': 'aller-retour', 'point-to-point': 'linéaire' };
+    const nf = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 });
+    const duration = (min) => `${Math.floor(min / 60)} h ${String(Math.round(min % 60)).padStart(2, '0')}`;
+
+    const state = { data: null, origin: null, selected: null };
+
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: {
+        version: 8,
+        sources: {
+          ign: {
+            type: 'raster', tileSize: 256, maxzoom: 19,
+            tiles: ['https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&FORMAT=image/png&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}'],
+            attribution: '© IGN — © contributeurs OpenStreetMap (ODbL)',
+          },
+          trails: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+          origin: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+        },
+        layers: [
+          { id: 'ign', type: 'raster', source: 'ign' },
+          { id: 'trails', type: 'line', source: 'trails', filter: ['!=', ['get', 'selected'], true],
+            paint: { 'line-color': '#57534e', 'line-width': 2, 'line-opacity': 0.6 } },
+          { id: 'trail-selected', type: 'line', source: 'trails', filter: ['==', ['get', 'selected'], true],
+            paint: { 'line-color': '#15803d', 'line-width': 5 } },
+          { id: 'origin', type: 'circle', source: 'origin',
+            paint: { 'circle-radius': 7, 'circle-color': '#1c1917', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } },
+        ],
+      },
+      center: [1.1, 49.4], zoom: 8,
+    });
+    map.addControl(new maplibregl.NavigationControl(), 'top-right');
+    map.on('click', 'trails', (e) => select(e.features[0].properties.trail_id, true));
+    map.on('mouseenter', 'trails', () => (map.getCanvas().style.cursor = 'pointer'));
+    map.on('mouseleave', 'trails', () => (map.getCanvas().style.cursor = ''));
+
+    const origin = () => state.data.origins.find((o) => o.id === state.origin);
+    const rating = (trailId) => state.data.ratings.find((r) => r.originId === state.origin && r.trailId === trailId);
+
+    function bounds(geometries) {
+      const b = new maplibregl.LngLatBounds();
+      for (const g of geometries) for (const c of g.type === 'LineString' ? g.coordinates : g.coordinates.flat()) b.extend(c);
+      return b;
+    }
+
+    // La liste ne dépend pas de la carte : seule la carte attend son chargement
+    // (qui n'arrive pas tant que l'onglet est en arrière-plan).
+    let mapLoaded = false;
+    map.once('load', () => { mapLoaded = true; if (state.data) renderMap(true); });
+
+    function renderMap(fit) {
+      if (!mapLoaded) return;
+      const o = origin();
+      map.getSource('trails').setData({
+        type: 'FeatureCollection',
+        features: o.candidates.map((t) => ({ type: 'Feature', geometry: t.geojson, properties: { trail_id: t.trail_id, selected: t.trail_id === state.selected } })),
+      });
+      map.getSource('origin').setData({ type: 'Feature', geometry: { type: 'Point', coordinates: [o.lng, o.lat] }, properties: {} });
+      if (fit && o.candidates.length) map.fitBounds(bounds(o.candidates.map((t) => t.geojson)).extend([o.lng, o.lat]), { padding: 40, duration: 0 });
+    }
+
+    function renderTabs() {
+      document.getElementById('tabs').replaceChildren(...state.data.origins.map((o) => {
+        const b = document.createElement('button');
+        b.role = 'tab';
+        b.textContent = `${o.label} (${o.candidates.length})`;
+        b.setAttribute('aria-selected', String(o.id === state.origin));
+        b.onclick = () => { state.origin = o.id; state.selected = null; render(true); };
+        return b;
+      }));
+    }
+
+    function renderProgress() {
+      const o = origin();
+      const rated = o.candidates.map((t) => rating(t.trail_id)).filter(Boolean);
+      const yes = rated.filter((r) => r.verdict === 'yes').length;
+      document.getElementById('progress').textContent = rated.length
+        ? `${rated.length} / ${o.candidates.length} notées — ${Math.round((100 * yes) / rated.length)} % « J'irais »`
+        : `${o.candidates.length} boucles à noter`;
+    }
+
+    function card(t, i) {
+      const r = rating(t.trail_id);
+      const el = document.createElement('article');
+      el.className = 'card' + (t.trail_id === state.selected ? ' selected' : '');
+      el.id = t.trail_id;
+      el.onclick = (e) => { if (!e.target.closest('button, select, a')) select(t.trail_id, false); };
+      const bar = (label, v) => `<div class="bar">${label} ${nf.format(v * 100)} %<span><i style="width:${Math.round(v * 100)}%"></i></span></div>`;
+      const sourceTag = t.source_type === 'generated_loop' ? 'générée OSM' : 'balisée OSM';
+      const osmLink = t.osm_relation_id
+        ? `<a href="https://www.openstreetmap.org/relation/${t.osm_relation_id}" target="_blank" rel="noopener">OSM ↗</a>`
+        : `<span class="stats">réseau OSM</span>`;
+      el.innerHTML = `
+        <h2><span class="rank">${i + 1}.</span> ${t.name ?? 'Sans nom'}</h2>
+        <div class="stats">${KIND[t.kind] ?? t.kind} · ${sourceTag} · ${nf.format(t.distance_m / 1000)} km · D+ ${t.elevation_gain_m ?? '?'} m · ${duration(t.estimated_duration_min)} · bitume ${Math.round(t.paved_ratio * 100)} %</div>
+        <div class="bars">${bar('Paysage', t.scenic_avg)}${bar('Isolement', t.isolation_avg)}${bar('Patrimoine', t.heritage_avg)}</div>
+        <div class="flags">${t.uncertainties.map((u) => `<span class="flag">${UNCERTAINTY[u] ?? u}</span>`).join('')}</div>
+        <div class="actions">
+          <button class="yes" aria-pressed="${r?.verdict === 'yes'}">J'irais</button>
+          <button class="no" aria-pressed="${r?.verdict === 'no'}">Non</button>
+          <select ${r?.verdict === 'no' ? '' : 'hidden'} aria-label="Raison">
+            <option value="">Raison…</option>${REASONS.map((x) => `<option ${r?.reason === x ? 'selected' : ''}>${x}</option>`).join('')}
+          </select>
+          ${osmLink}
+        </div>`;
+      const [yesB, noB] = el.querySelectorAll('button');
+      const select_ = el.querySelector('select');
+      yesB.onclick = () => save(t.trail_id, r?.verdict === 'yes' ? null : 'yes');
+      noB.onclick = () => save(t.trail_id, r?.verdict === 'no' ? null : 'no', select_.value || undefined);
+      select_.onchange = () => save(t.trail_id, 'no', select_.value || undefined);
+      return el;
+    }
+
+    function renderList() {
+      document.getElementById('list').replaceChildren(...origin().candidates.map(card));
+    }
+
+    function render(fit) { renderTabs(); renderList(); renderProgress(); renderMap(fit); }
+
+    function select(trailId, scroll) {
+      state.selected = trailId;
+      renderList();
+      renderMap(false);
+      const t = origin().candidates.find((c) => c.trail_id === trailId);
+      map.fitBounds(bounds([t.geojson]), { padding: 60, maxZoom: 15 });
+      if (scroll) document.getElementById(trailId)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+
+    async function save(trailId, verdict, reason) {
+      const response = await fetch('/api/ratings', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ originId: state.origin, trailId, verdict, ...(reason ? { reason } : {}) }),
+      });
+      if (!response.ok) return alert("L'avis n'a pas été enregistré.");
+      state.data.ratings = state.data.ratings.filter((r) => !(r.originId === state.origin && r.trailId === trailId));
+      if (verdict) state.data.ratings.push({ originId: state.origin, trailId, verdict, reason });
+      renderList(); renderProgress();
+    }
+
+    state.data = await (await fetch('/api/review')).json();
+    state.origin = state.data.origins[0].id;
+    render(true);
+  </script>
+</body>
+</html>

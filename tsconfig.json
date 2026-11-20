@@ -15,5 +15,5 @@
     "isolatedModules": true,
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src", "server", "shared", "e2e", "*.ts"]
+  "include": ["src", "server", "shared", "data-pipeline", "e2e", "*.ts"]
 }

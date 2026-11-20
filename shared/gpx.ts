@@ -134,13 +134,17 @@ export function round(value: number, digits = 0): number {
 }
 
 /** Sans altitude complète, les stats d'altitude valent null (SPEC §5.1). */
-export function computeHikeStats(points: TrackPoint[], pace: Settings['pace']): HikeStats {
+export function computeHikeStats(
+  points: TrackPoint[],
+  pace: Settings['pace'],
+  hysteresisM = ELEVATION_HYSTERESIS_M,
+): HikeStats {
   const distances = cumulativeKm(points);
   const totalKm = distances.at(-1) ?? 0;
   const altitudes = points.flatMap((p) => (p.altM === null ? [] : [p.altM]));
   const smoothed =
     altitudes.length === points.length ? smoothAltitudes(altitudes, distances) : null;
-  const change = smoothed && elevationChange(smoothed);
+  const change = smoothed && elevationChange(smoothed, hysteresisM);
 
   return {
     distanceKm: round(totalKm, 2),
