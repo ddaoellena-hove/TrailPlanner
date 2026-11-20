@@ -1,17 +1,17 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { activitySource, activityTitle, findDuplicate, recordedMetrics } from '../shared/activity';
 import {
+  ActivitySchema,
   type Activity,
   type ActivityDraft,
   type ActivityPreview,
-  type ActivityStoreFile,
-  ActivityStoreSchema,
   type DuplicateCheck,
 } from '../shared/schema';
+import { UserDb, sha256Hex } from './db';
+import { writeAtomic } from './fs-atomic';
 import { parseRecordedGpx } from './gpx';
-import { writeAtomic } from './trip-store';
 
 export class ActivityNotFoundError extends Error {}
 
@@ -28,10 +28,6 @@ export class DuplicateActivityError extends Error {
 
 type ImportOptions = { title?: string; confirmProbableDuplicate?: boolean };
 
-function isMissing(error: unknown): boolean {
-  return error instanceof Error && 'code' in error && error.code === 'ENOENT';
-}
-
 /** Lit le GPX et calcule l'activité, sans rien écrire. Toutes les mesures sont calculées. */
 export function draftActivity(bytes: Buffer, fileName: string): ActivityDraft {
   const track = parseRecordedGpx(bytes.toString('utf8'));
@@ -47,25 +43,27 @@ export function draftActivity(bytes: Buffer, fileName: string): ActivityDraft {
       elevation: metrics.elevationGainMeters === null ? null : 'calculated',
     },
     originalFileName: fileName,
-    fingerprint: createHash('sha256').update(bytes).digest('hex'),
+    fingerprint: sha256Hex(bytes),
   };
 }
 
 /**
- * Activités enregistrées : `<trips>/.activities/activities.json` et `gpx/<id>.gpx`.
- * Un import ne modifie jamais une activité existante ; seul son lien vers une rando prévue
- * se change, à la main.
+ * Activités enregistrées : indexées dans SQLite (`activities`) avec copies GPX brutes
+ * dans `<trips>/.activities/gpx/<id>.gpx` et le coffre SHA-256 (`.gpx-vault/`).
  */
 export class ActivityStore {
   private readonly root: string;
+  private readonly userDb: UserDb;
   private queue: Promise<unknown> = Promise.resolve();
 
-  constructor(tripsDir: string) {
-    this.root = path.join(tripsDir, '.activities');
-  }
-
-  private get file(): string {
-    return path.join(this.root, 'activities.json');
+  constructor(dirOrDb: string | UserDb) {
+    if (typeof dirOrDb === 'string') {
+      this.root = path.join(dirOrDb, '.activities');
+      this.userDb = new UserDb(dirOrDb);
+    } else {
+      this.root = path.join(dirOrDb.tripsDir, '.activities');
+      this.userDb = dirOrDb;
+    }
   }
 
   private exclusive<T>(task: () => Promise<T>): Promise<T> {
@@ -74,28 +72,54 @@ export class ActivityStore {
     return run;
   }
 
-  private async load(): Promise<ActivityStoreFile> {
-    try {
-      return ActivityStoreSchema.parse(JSON.parse(await readFile(this.file, 'utf8')));
-    } catch (error) {
-      if (isMissing(error)) return { schemaVersion: 1, activities: [] };
-      throw error;
-    }
+  private async loadAll(): Promise<Activity[]> {
+    await this.userDb.ensureReady();
+    const rows = await this.userDb.db
+      .selectFrom('activities')
+      .select('data')
+      .orderBy('imported_at', 'asc')
+      .execute();
+    return rows.map((row) => ActivitySchema.parse(JSON.parse(row.data)));
   }
 
-  /** Point d'injection des tests : écrit l'index des activités. */
-  protected async writeIndex(content: string): Promise<void> {
-    await writeAtomic(this.file, content);
+  /** Point d'injection des tests : enregistre une activité dans SQLite. */
+  protected async writeIndex(activity: Activity): Promise<void> {
+    const parsed = ActivitySchema.parse(activity);
+    await this.userDb.db
+      .insertInto('activities')
+      .values({
+        id: parsed.id,
+        fingerprint: parsed.fingerprint,
+        title: parsed.title,
+        activity_date: parsed.activityDate,
+        linked_route_id: parsed.linkedRouteId,
+        data: JSON.stringify(parsed),
+        imported_at: parsed.importedAt,
+      })
+      .onConflict((oc) =>
+        oc.column('id').doUpdateSet({
+          title: parsed.title,
+          activity_date: parsed.activityDate,
+          linked_route_id: parsed.linkedRouteId,
+          data: JSON.stringify(parsed),
+        }),
+      )
+      .execute();
   }
 
   list(): Promise<Activity[]> {
-    return this.exclusive(async () => (await this.load()).activities);
+    return this.exclusive(() => this.loadAll());
   }
 
   async get(id: string): Promise<Activity> {
-    const activity = (await this.list()).find((candidate) => candidate.id === id);
-    if (!activity) throw new ActivityNotFoundError(id);
-    return activity;
+    await this.userDb.ensureReady();
+    const row = await this.userDb.db
+      .selectFrom('activities')
+      .select('data')
+      .where('id', '=', id)
+      .executeTakeFirst();
+    if (!row) throw new ActivityNotFoundError(id);
+    return ActivitySchema.parse(JSON.parse(row.data));
   }
 
   async readGpx(id: string): Promise<string> {
@@ -109,15 +133,9 @@ export class ActivityStore {
    */
   setLink(id: string, routeId: string | null): Promise<Activity> {
     return this.exclusive(async () => {
-      const current = await this.load();
-      const activity = current.activities.find((candidate) => candidate.id === id);
-      if (!activity) throw new ActivityNotFoundError(id);
+      const activity = await this.get(id);
       const linked: Activity = { ...activity, linkedRouteId: routeId };
-      const next = ActivityStoreSchema.parse({
-        ...current,
-        activities: current.activities.map((candidate) => (candidate.id === id ? linked : candidate)),
-      });
-      await this.writeIndex(`${JSON.stringify(next, null, 2)}\n`);
+      await this.writeIndex(linked);
       return linked;
     });
   }
@@ -125,15 +143,9 @@ export class ActivityStore {
   /** Mémorise la note Obsidian exportée pour la sortie (chemin dans `Sport/` et projet lié). */
   setObsidian(id: string, obsidian: NonNullable<Activity['obsidian']>): Promise<Activity> {
     return this.exclusive(async () => {
-      const current = await this.load();
-      const activity = current.activities.find((candidate) => candidate.id === id);
-      if (!activity) throw new ActivityNotFoundError(id);
+      const activity = await this.get(id);
       const updated: Activity = { ...activity, obsidian };
-      const next = ActivityStoreSchema.parse({
-        ...current,
-        activities: current.activities.map((candidate) => (candidate.id === id ? updated : candidate)),
-      });
-      await this.writeIndex(`${JSON.stringify(next, null, 2)}\n`);
+      await this.writeIndex(updated);
       return updated;
     });
   }
@@ -144,14 +156,14 @@ export class ActivityStore {
   }
 
   /**
-   * Copie d'abord le GPX, puis réécrit l'index. Si l'index échoue, la copie est retirée :
+   * Copie d'abord le GPX, puis insère dans SQLite. Si l'insertion échoue, la copie est retirée :
    * un import interrompu ne laisse ni activité partielle ni fichier orphelin.
    */
   async add(bytes: Buffer, fileName: string, options: ImportOptions = {}): Promise<Activity> {
     const draft = draftActivity(bytes, fileName);
     return this.exclusive(async () => {
-      const current = await this.load();
-      const duplicate = findDuplicate(draft, current.activities);
+      const existing = await this.loadAll();
+      const duplicate = findDuplicate(draft, existing);
       if (duplicate.status === 'exact') throw new DuplicateActivityError(duplicate);
       if (duplicate.status === 'probable' && !options.confirmProbableDuplicate) {
         throw new DuplicateActivityError(duplicate);
@@ -167,18 +179,17 @@ export class ActivityStore {
         linkedRouteId: null,
         importedAt: new Date().toISOString(),
       };
-      const next = ActivityStoreSchema.parse({
-        ...current,
-        activities: [...current.activities, activity],
-      });
+      ActivitySchema.parse(activity);
+
       const gpxPath = path.join(this.root, originalFile);
       await writeAtomic(gpxPath, bytes);
       try {
-        await this.writeIndex(`${JSON.stringify(next, null, 2)}\n`);
+        await this.writeIndex(activity);
       } catch (error) {
         await rm(gpxPath, { force: true });
         throw error;
       }
+      await this.userDb.storeGpxInVault(bytes, fileName);
       return activity;
     });
   }

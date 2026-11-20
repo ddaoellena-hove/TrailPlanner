@@ -57,11 +57,12 @@ Livrable : `data-pipeline/` autonome, sans toucher à l'application.
 
 ---
 
-## Phase 1 — Socle utilisateur et renommage (2–3 semaines)
+## Phase 1 — Socle utilisateur SQLite (livrée le 20 novembre 2026, branche `feat/v1-sqlite`)
 
-- Stockage JSON (`trips/`) → **SQLite** (`better-sqlite3` + Kysely) : voyages, bibliothèque, sorties, réglages. Migration unique et testée, sauvegarde JSON conservée.
-- Coffre GPX : originaux bruts + SHA-256 (déjà en partie fait dans la bibliothèque, question 33), jamais modifiés.
-- Renommage **TrailPlanner → Vagari** : package, interface, logo, README, SPEC, CLAUDE.md. **Page Notion** : le titre « Carnet d'itinéraire — généré par TrailPlanner » sert à la retrouver ; il faut retrouver aussi l'ancien titre et le renommer au premier export, sinon un second carnet est créé.
+- Stockage JSON (`trips/`, `.library/`, `.activities/`, `settings.json`) migré vers **SQLite** (`better-sqlite3` + Kysely, `trips/itinera.db` en mode WAL, `server/db.ts`).
+- Migration unique, atomique et idempotente depuis les fichiers JSON hérités, qui restent intacts sur disque comme sauvegarde (`server/db.test.ts`).
+- Coffre GPX immuable (`trips/.gpx-vault/<sha256>.gpx` + table `gpx_vault`), alimenté par la migration et chaque import.
+- Le nom **Itinera** (déjà adopté le 20 novembre 2026) est conservé à la place de Vagari ; l'export Notion a été remplacé par Obsidian.
 - **Démo de fin :** toutes les fonctions actuelles marchent sur SQLite ; tests unitaires et e2e verts.
 
 ## Phase 2 — Routage local GraphHopper (1–2 semaines)

@@ -20,6 +20,7 @@ import {
 } from '../shared/schema';
 import { createApp } from './app';
 import type { AssistantProvider } from './assistant-provider';
+import { DB_FILE_NAME, UserDb } from './db';
 
 const newTrip: NewTrip = {
   name: 'Dévoluy & Champsaur',
@@ -103,11 +104,20 @@ describe('API voyages', () => {
     expect(foreign.status).toBe(403);
   });
 
-  it('écrit un trip.json indenté, sans fichier temporaire résiduel', async () => {
+  it('persiste les voyages dans SQLite (itinera.db) sans fichier temporaire résiduel', async () => {
     const { slug } = await createTrip();
-    const content = await readFile(path.join(dir, slug, 'trip.json'), 'utf8');
-    expect(content.startsWith('{\n  "schemaVersion": 1,\n  "id"')).toBe(true);
-    expect(await readdir(path.join(dir, slug))).toEqual(['trip.json']);
+    const files = await readdir(dir);
+    expect(files).toContain(DB_FILE_NAME);
+    expect(files.filter((f) => f.endsWith('.tmp'))).toEqual([]);
+    const userDb = new UserDb(dir);
+    const row = await userDb.db
+      .selectFrom('trips')
+      .select('data')
+      .where('slug', '=', slug)
+      .executeTakeFirst();
+    await userDb.close();
+    expect(row?.data).toBeDefined();
+    expect(JSON.parse(row!.data).schemaVersion).toBe(1);
   });
 
   it('attribue un slug distinct aux homonymes', async () => {
@@ -118,7 +128,7 @@ describe('API voyages', () => {
   it('refuse une création invalide', async () => {
     const response = await post('/api/trips', { ...newTrip, endDate: '2027-06-01' });
     expect(response.status).toBe(400);
-    expect(await readdir(dir)).toEqual([]);
+    expect(await (await request('/api/trips')).json()).toEqual([]);
   });
 
   it('sauvegarde et met à jour updatedAt', async () => {
@@ -145,7 +155,9 @@ describe('API voyages', () => {
   it('liste les résumés et ignore un voyage illisible', async () => {
     const { slug } = await createTrip();
     await createTrip({ ...newTrip, name: 'Cassé' });
-    await writeFile(path.join(dir, 'casse', 'trip.json'), '{');
+    const userDb = new UserDb(dir);
+    await userDb.db.updateTable('trips').set({ data: '{' }).where('slug', '=', 'casse').execute();
+    await userDb.close();
 
     const summaries = (await (await request('/api/trips')).json()) as TripSummary[];
 
@@ -165,18 +177,24 @@ describe('API voyages', () => {
 
   it('duplique sans reprendre le lien Obsidian', async () => {
     const trip = await createTrip();
+    await mkdir(path.join(dir, trip.slug), { recursive: true });
     await writeFile(path.join(dir, trip.slug, 'marker.gpx'), '<gpx/>');
-    await writeFile(
-      path.join(dir, trip.slug, 'trip.json'),
-      JSON.stringify({
-        ...trip,
-        obsidian: {
-          projectName: 'Dévoluy',
-          carnetPath: 'Projects/Dévoluy/carnet.md',
-          lastExportAt: '2026-11-20T10:00:00.000Z',
-        },
-      }),
-    );
+    const userDb = new UserDb(dir);
+    await userDb.db
+      .updateTable('trips')
+      .set({
+        data: JSON.stringify({
+          ...trip,
+          obsidian: {
+            projectName: 'Dévoluy',
+            carnetPath: 'Projects/Dévoluy/carnet.md',
+            lastExportAt: '2026-11-20T10:00:00.000Z',
+          },
+        }),
+      })
+      .where('slug', '=', trip.slug)
+      .execute();
+    await userDb.close();
 
     const copy = (await (await post(`/api/trips/${trip.slug}/duplicate`, {})).json()) as Trip;
 
@@ -283,9 +301,7 @@ describe('API voyages', () => {
 
   it('ne réécrit pas les voyages pour un réglage de carte', async () => {
     const { slug } = await createTrip();
-    const file = path.join(dir, slug, 'trip.json');
-    await writeFile(file, `${await readFile(file, 'utf8')}\n`);
-    const before = await readFile(file, 'utf8');
+    const before = ((await (await request(`/api/trips/${slug}`)).json()) as Trip).updatedAt;
 
     const response = await request('/api/settings', {
       method: 'PUT',
@@ -293,7 +309,7 @@ describe('API voyages', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(await readFile(file, 'utf8')).toBe(before);
+    expect(((await (await request(`/api/trips/${slug}`)).json()) as Trip).updatedAt).toBe(before);
     expect(await (await request('/api/settings')).json()).toMatchObject({
       mapOverlays: ['relief'],
       mapBaseOpacity: 0.5,
@@ -343,10 +359,13 @@ describe('API voyages', () => {
       carnetPath: 'Projects/Dévoluy/carnet.md',
       lastExportAt: '2026-11-20T10:00:00.000Z',
     };
-    await writeFile(
-      path.join(dir, trip.slug, 'trip.json'),
-      JSON.stringify({ ...trip, obsidian: link }),
-    );
+    const userDb = new UserDb(dir);
+    await userDb.db
+      .updateTable('trips')
+      .set({ data: JSON.stringify({ ...trip, obsidian: link }) })
+      .where('slug', '=', trip.slug)
+      .execute();
+    await userDb.close();
     const saved = await request(`/api/trips/${trip.slug}`, {
       method: 'PUT',
       body: JSON.stringify(trip),

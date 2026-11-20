@@ -1,6 +1,3 @@
-import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import {
   type SyncFile,
   type SyncLedger,
@@ -10,14 +7,14 @@ import {
 } from '../shared/schema';
 import { type ActivityStore, DuplicateActivityError } from './activity-store';
 import type { ActivityConnector } from './activity-connector';
-import { writeAtomic } from './trip-store';
+import { UserDb, sha256Hex } from './db';
 
 export class SyncError extends Error {}
 
 const FINAL: SyncFile['status'][] = ['imported', 'duplicate', 'pending', 'ignored'];
 
 function hashOf(bytes: Buffer): string {
-  return createHash('sha256').update(bytes).digest('hex');
+  return sha256Hex(bytes);
 }
 
 function errorMessage(error: unknown): string {
@@ -26,20 +23,20 @@ function errorMessage(error: unknown): string {
 
 /**
  * Synchronisation depuis une source (le dossier surveillé) vers `ActivityStore`.
- * Le registre `.activities/sync.json` retient chaque fichier traité par son empreinte :
+ * Le registre (table SQLite `activity_sync`) retient chaque fichier traité par son empreinte :
  * un fichier importé, en double ou en attente n'est plus relu ; un échec est retenté.
  * Un doublon probable n'est jamais importé sans un choix explicite.
  */
 export class ActivitySync {
-  private readonly file: string;
+  private readonly userDb: UserDb;
   private running: Promise<SyncReport> | null = null;
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(
-    tripsDir: string,
+    dirOrDb: string | UserDb,
     private readonly store: ActivityStore,
   ) {
-    this.file = path.join(tripsDir, '.activities', 'sync.json');
+    this.userDb = typeof dirOrDb === 'string' ? new UserDb(dirOrDb) : dirOrDb;
   }
 
   private exclusive<T>(task: () => Promise<T>): Promise<T> {
@@ -49,18 +46,25 @@ export class ActivitySync {
   }
 
   private async load(): Promise<SyncLedger> {
-    try {
-      return SyncLedgerSchema.parse(JSON.parse(await readFile(this.file, 'utf8')));
-    } catch (error) {
-      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-        return { schemaVersion: 1, files: {} };
-      }
-      throw error;
-    }
+    await this.userDb.ensureReady();
+    const row = await this.userDb.db
+      .selectFrom('activity_sync')
+      .select('data')
+      .where('id', '=', 1)
+      .executeTakeFirst();
+    if (!row) return { schemaVersion: 1, files: {} };
+    return SyncLedgerSchema.parse(JSON.parse(row.data));
   }
 
   private async save(ledger: SyncLedger): Promise<void> {
-    await writeAtomic(this.file, `${JSON.stringify(SyncLedgerSchema.parse(ledger), null, 2)}\n`);
+    await this.userDb.ensureReady();
+    const data = JSON.stringify(SyncLedgerSchema.parse(ledger));
+    const updated_at = new Date().toISOString();
+    await this.userDb.db
+      .insertInto('activity_sync')
+      .values({ id: 1, data, updated_at })
+      .onConflict((oc) => oc.column('id').doUpdateSet({ data, updated_at }))
+      .execute();
   }
 
   get isRunning(): boolean {

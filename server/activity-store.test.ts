@@ -48,7 +48,8 @@ describe('ActivityStore', () => {
     });
     expect(await readFile(path.join(root(), activity.originalFile))).toEqual(sortie);
     expect(await new ActivityStore(dir).list()).toEqual([activity]);
-    expect(await readdir(root())).toEqual(['activities.json', 'gpx']);
+    expect(await readdir(root())).toEqual(['gpx']);
+    expect(await readdir(path.join(dir, '.gpx-vault'))).toEqual([`${activity.fingerprint}.gpx`]);
   });
 
   it('prévisualise sans rien écrire', async () => {

@@ -1,77 +1,107 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename } from 'node:fs/promises';
 import path from 'node:path';
 import { hikesWithPace } from '../shared/gpx';
 import {
+  LibraryHikeSchema,
   type Hike,
-  type Library,
   type LibraryHike,
   type LibraryHikeFields,
   type LibraryLinks,
-  LibrarySchema,
   type NewOuting,
   type Settings,
 } from '../shared/schema';
-import { type TripStore, writeAtomic } from './trip-store';
+import { UserDb, sha256Hex } from './db';
+import { writeAtomic } from './fs-atomic';
+import type { TripStore } from './trip-store';
 
 export class LibraryHikeNotFoundError extends Error {}
 
-function hashOf(bytes: Buffer): string {
-  return createHash('sha256').update(bytes).digest('hex');
-}
+const SEEDED_KEY = 'library_seeded';
 
 /**
- * Randos communes aux voyages : `<trips>/.library/`. Les voyages en gardent une copie, la
- * bibliothèque ne lit donc jamais leurs fichiers après la reprise initiale.
+ * Randos communes aux voyages, indexées dans SQLite (`library_hikes`) avec GPX immuables
+ * dans `.library/gpx/` et le coffre SHA-256 (`.gpx-vault/`).
  */
 export class LibraryStore {
   private readonly root: string;
+  private readonly userDb: UserDb;
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(
-    tripsDir: string,
+    dirOrDb: string | UserDb,
     private readonly trips: TripStore,
   ) {
-    this.root = path.join(tripsDir, '.library');
+    if (typeof dirOrDb === 'string') {
+      this.root = path.join(dirOrDb, '.library');
+      this.userDb = new UserDb(dirOrDb);
+    } else {
+      this.root = path.join(dirOrDb.tripsDir, '.library');
+      this.userDb = dirOrDb;
+    }
   }
 
-  private get file(): string {
-    return path.join(this.root, 'library.json');
-  }
-
-  /** Les écritures se suivent : deux requêtes simultanées ne doivent pas s'écraser. */
+  /** Les écritures se suivent : deux requêtes simultanées ne doivent pas se marcher dessus. */
   private exclusive<T>(task: () => Promise<T>): Promise<T> {
     const run = this.queue.then(task, task);
     this.queue = run.catch(() => undefined);
     return run;
   }
 
-  private async write(library: Library): Promise<void> {
-    await writeAtomic(this.file, `${JSON.stringify(LibrarySchema.parse(library), null, 2)}\n`);
+  private async writeEntry(hike: LibraryHike): Promise<void> {
+    const parsed = LibraryHikeSchema.parse(hike);
+    await this.userDb.db
+      .insertInto('library_hikes')
+      .values({
+        id: parsed.id,
+        gpx_hash: parsed.gpxHash,
+        name: parsed.name,
+        data: JSON.stringify(parsed),
+        created_at: parsed.createdAt,
+      })
+      .onConflict((oc) =>
+        oc.column('id').doUpdateSet({
+          name: parsed.name,
+          data: JSON.stringify(parsed),
+        }),
+      )
+      .execute();
   }
 
-  private async entry(hike: Hike, bytes: Buffer, gpxHash: string): Promise<LibraryHike> {
+  private async createEntry(hike: Hike, bytes: Buffer, gpxHash: string): Promise<LibraryHike> {
     const id = randomUUID();
     const gpxFile = `gpx/${id}.gpx`;
     await writeAtomic(path.join(this.root, gpxFile), bytes);
+    await this.userDb.storeGpxInVault(bytes, `${hike.name}.gpx`);
     return { ...hike, id, gpxFile, gpxHash, outings: [], createdAt: new Date().toISOString() };
   }
 
   /** Reprend une seule fois les voyages existants : ensuite, retirer une rando reste définitif. */
-  private async load(): Promise<Library> {
-    try {
-      return LibrarySchema.parse(JSON.parse(await readFile(this.file, 'utf8')));
-    } catch (error) {
-      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
-    }
-    const library: Library = { schemaVersion: 1, hikes: [] };
+  private async ensureSeeded(): Promise<void> {
+    await this.userDb.ensureReady();
+    if ((await this.userDb.getMeta(SEEDED_KEY)) !== null) return;
+    const seen = new Set(
+      (await this.userDb.db.selectFrom('library_hikes').select('gpx_hash').execute()).map(
+        (r) => r.gpx_hash,
+      ),
+    );
     for (const { hike, bytes } of await this.trips.hikeFiles()) {
-      const gpxHash = hashOf(bytes);
-      if (library.hikes.some((known) => known.gpxHash === gpxHash)) continue;
-      library.hikes.push(await this.entry(hike, bytes, gpxHash));
+      const gpxHash = sha256Hex(bytes);
+      if (seen.has(gpxHash)) continue;
+      seen.add(gpxHash);
+      await this.writeEntry(await this.createEntry(hike, bytes, gpxHash));
     }
-    await this.write(library);
-    return library;
+    await this.userDb.setMeta(SEEDED_KEY, new Date().toISOString());
+  }
+
+  private async loadAll(): Promise<LibraryHike[]> {
+    await this.ensureSeeded();
+    const rows = await this.userDb.db
+      .selectFrom('library_hikes')
+      .select('data')
+      .orderBy('created_at', 'asc')
+      .execute();
+    return rows.map((row) => LibraryHikeSchema.parse(JSON.parse(row.data)));
   }
 
   private update(
@@ -79,29 +109,36 @@ export class LibraryStore {
     change: (hike: LibraryHike) => LibraryHike,
   ): Promise<LibraryHike> {
     return this.exclusive(async () => {
-      const library = await this.load();
-      const current = library.hikes.find((hike) => hike.id === id);
-      if (!current) throw new LibraryHikeNotFoundError(id);
-      const changed = change(current);
-      const hikes = library.hikes.map((hike) => (hike.id === id ? changed : hike));
-      await this.write({ ...library, hikes });
+      await this.ensureSeeded();
+      const row = await this.userDb.db
+        .selectFrom('library_hikes')
+        .select('data')
+        .where('id', '=', id)
+        .executeTakeFirst();
+      if (!row) throw new LibraryHikeNotFoundError(id);
+      const changed = change(LibraryHikeSchema.parse(JSON.parse(row.data)));
+      await this.writeEntry(changed);
       return changed;
     });
   }
 
   list(): Promise<LibraryHike[]> {
-    return this.exclusive(async () => (await this.load()).hikes);
+    return this.exclusive(() => this.loadAll());
   }
 
   /** Garde un GPX importé dans un voyage. Le même fichier ne crée pas de doublon. */
   add(hike: Hike, bytes: Buffer): Promise<LibraryHike> {
     return this.exclusive(async () => {
-      const library = await this.load();
-      const gpxHash = hashOf(bytes);
-      const known = library.hikes.find((candidate) => candidate.gpxHash === gpxHash);
-      if (known) return known;
-      const added = await this.entry(hike, bytes, gpxHash);
-      await this.write({ ...library, hikes: [...library.hikes, added] });
+      await this.ensureSeeded();
+      const gpxHash = sha256Hex(bytes);
+      const existing = await this.userDb.db
+        .selectFrom('library_hikes')
+        .select('data')
+        .where('gpx_hash', '=', gpxHash)
+        .executeTakeFirst();
+      if (existing) return LibraryHikeSchema.parse(JSON.parse(existing.data));
+      const added = await this.createEntry(hike, bytes, gpxHash);
+      await this.writeEntry(added);
       return added;
     });
   }
@@ -142,19 +179,26 @@ export class LibraryStore {
   /** Le GPX part dans `.library/.trash` ; les voyages gardent leur copie. */
   remove(id: string): Promise<void> {
     return this.exclusive(async () => {
-      const library = await this.load();
-      const hike = library.hikes.find((candidate) => candidate.id === id);
-      if (!hike) throw new LibraryHikeNotFoundError(id);
+      await this.ensureSeeded();
+      const row = await this.userDb.db
+        .selectFrom('library_hikes')
+        .select('data')
+        .where('id', '=', id)
+        .executeTakeFirst();
+      if (!row) throw new LibraryHikeNotFoundError(id);
+      const hike = LibraryHikeSchema.parse(JSON.parse(row.data));
       await mkdir(path.join(this.root, '.trash'), { recursive: true });
       await rename(path.join(this.root, hike.gpxFile), path.join(this.root, '.trash', `${id}.gpx`));
-      await this.write({ ...library, hikes: library.hikes.filter(({ id: other }) => other !== id) });
+      await this.userDb.db.deleteFrom('library_hikes').where('id', '=', id).execute();
     });
   }
 
   applyPace(pace: Settings['pace']): Promise<void> {
     return this.exclusive(async () => {
-      const library = await this.load();
-      await this.write({ ...library, hikes: hikesWithPace(library.hikes, pace) });
+      const hikes = await this.loadAll();
+      for (const updated of hikesWithPace(hikes, pace)) {
+        await this.writeEntry(updated);
+      }
     });
   }
 
@@ -164,7 +208,7 @@ export class LibraryStore {
     const files = await this.trips.hikeFiles(slug);
     return Object.fromEntries(
       files.flatMap(({ hike, bytes }) => {
-        const gpxHash = hashOf(bytes);
+        const gpxHash = sha256Hex(bytes);
         const known = hikes.find((candidate) => candidate.gpxHash === gpxHash);
         return known ? [[hike.id, known.id]] : [];
       }),

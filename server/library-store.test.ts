@@ -43,12 +43,11 @@ describe('LibraryStore', () => {
     const hike = await importInto(first.slug, gpx(44.7));
     await importInto(second.slug, gpx(44.7));
     await importInto(second.slug, gpx(45.1));
-    const tripFile = path.join(dir, first.slug, 'trip.json');
-    const before = await readFile(tripFile, 'utf8');
+    const before = await trips.get(first.slug);
 
     expect(await library.list()).toHaveLength(2);
     expect(await new LibraryStore(dir, trips).list()).toHaveLength(2);
-    expect(await readFile(tripFile, 'utf8')).toBe(before);
+    expect(await trips.get(first.slug)).toEqual(before);
     expect(await readFile(path.join(dir, first.slug, hike.gpxFile))).toEqual(gpx(44.7));
   });
 

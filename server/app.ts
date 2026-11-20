@@ -53,6 +53,7 @@ import {
 import { computeItinerary } from './routing';
 import { SettingsStore } from './settings-store';
 import { TripNotFoundError, TripStore } from './trip-store';
+import { UserDb } from './db';
 
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost']);
 
@@ -86,11 +87,12 @@ export function createApp({
   assistants = [],
   autoSync = false,
 }: AppOptions) {
-  const store = new TripStore(tripsDir);
-  const library = new LibraryStore(tripsDir, store);
-  const activities = new ActivityStore(tripsDir);
-  const sync = new ActivitySync(tripsDir, activities);
-  const settings = new SettingsStore(settingsFile ?? path.join(tripsDir, 'settings.json'));
+  const userDb = new UserDb(tripsDir, settingsFile ?? path.join(tripsDir, 'settings.json'));
+  const store = new TripStore(userDb);
+  const library = new LibraryStore(userDb, store);
+  const activities = new ActivityStore(userDb);
+  const sync = new ActivitySync(userDb, activities);
+  const settings = new SettingsStore(userDb);
   if (autoSync) new AutoSync(sync, () => settings.read()).start();
   const app = new Hono();
 
