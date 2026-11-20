@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -17,90 +17,98 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import type { NotionExportRequest, Trip } from '../../shared/schema';
+import type { ObsidianTripExportRequest, Trip } from '../../shared/schema';
 
 export function ExportDialog({ trip, onClose }: { trip: Trip; onClose: () => void }) {
   const queryClient = useQueryClient();
-  const alreadyLinked = Boolean(trip.notion?.projectPageId);
-  const [mode, setMode] = useState<'create' | 'link'>('create');
+  const alreadyLinked = Boolean(trip.obsidian?.projectName);
+  const [mode, setMode] = useState<'create' | 'link'>('link');
+  const [projectName, setProjectName] = useState(trip.name);
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
-  const [projectPageId, setProjectPageId] = useState<string | null>(null);
-  const [updateStartDate, setUpdateStartDate] = useState(false);
+  const [selectedProject, setSelectedProject] = useState<string | null>(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebounced(search), 300);
+    const timer = setTimeout(() => setDebounced(search), 250);
     return () => clearTimeout(timer);
   }, [search]);
 
   const health = useQuery({ queryKey: ['health'], queryFn: api.getHealth });
   const preview = useQuery({
-    queryKey: ['notion-preview', trip.slug, trip.updatedAt],
-    queryFn: () => api.notionPreview(trip.slug),
+    queryKey: ['obsidian-trip-preview', trip.slug, trip.updatedAt],
+    queryFn: () => api.obsidianTripPreview(trip.slug),
   });
-  const hasToken = health.data !== undefined && health.data.notion !== 'missing';
+  const vaultReady = health.data?.obsidian === 'configured';
   const projects = useQuery({
-    queryKey: ['notion-projects', debounced],
-    queryFn: () => api.notionProjects(debounced),
-    enabled: hasToken && mode === 'link' && !alreadyLinked,
+    queryKey: ['obsidian-projects', debounced],
+    queryFn: () => api.obsidianProjects(debounced),
+    enabled: vaultReady && mode === 'link' && !alreadyLinked,
     retry: false,
   });
 
   const exportTrip = useMutation({
-    mutationFn: (body: NotionExportRequest) => api.notionExport(trip.slug, body),
-    onSuccess: async () => {
+    mutationFn: (body: ObsidianTripExportRequest) => api.obsidianTripExport(trip.slug, body),
+    onSuccess: async (updated) => {
       await queryClient.invalidateQueries({ queryKey: ['trip', trip.slug] });
       await queryClient.invalidateQueries({ queryKey: ['trips'] });
-      toast.success('Carnet exporté vers Notion');
+      toast.success(`Carnet exporté dans ${updated.obsidian?.carnetPath ?? 'Obsidian'}`);
       onClose();
     },
   });
 
-  const request: NotionExportRequest | null =
-    alreadyLinked || mode === 'create'
-      ? { mode: 'create' }
-      : projectPageId
-        ? { mode: 'link', projectPageId, updateStartDate }
+  const request: ObsidianTripExportRequest | null = alreadyLinked
+    ? { mode: 'link', projectName: trip.obsidian!.projectName }
+    : mode === 'create'
+      ? projectName.trim()
+        ? { mode: 'create', projectName: projectName.trim() }
+        : null
+      : selectedProject
+        ? { mode: 'link', projectName: selectedProject }
         : null;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Exporter vers Notion</DialogTitle>
+          <DialogTitle>Exporter vers Obsidian</DialogTitle>
           <DialogDescription>
             {alreadyLinked
-              ? 'Ce voyage est déjà lié : seule la sous-page carnet sera remplacée.'
-              : 'Le contenu de la page projet n’est jamais modifié : seule une sous-page carnet est écrite.'}
+              ? `Lié au projet « ${trip.obsidian!.projectName} » : seul le sous-fichier carnet sera remplacé.`
+              : 'Le contenu d’un projet existant n’est jamais modifié : seul un sous-fichier carnet dédié est écrit.'}
           </DialogDescription>
         </DialogHeader>
 
-        {!hasToken && health.data && (
+        {health.data?.obsidian === 'missing' && (
           <p role="alert" className="text-sm text-destructive">
-            Export désactivé : renseignez NOTION_TOKEN dans .env, puis partagez l'intégration avec
-            la base Projects. L'aperçu reste disponible.
+            Export désactivé : renseignez le dossier du vault Obsidian dans les Réglages (ou
+            OBSIDIAN_VAULT_DIR dans .env). L’aperçu reste disponible.
           </p>
         )}
-        {health.data?.notion === 'invalid' && (
+        {health.data?.obsidian === 'invalid' && (
           <p role="alert" className="text-sm text-destructive">
-            Notion refuse ce token : vérifiez NOTION_TOKEN dans .env.
+            Vault Obsidian introuvable : vérifiez le chemin configuré dans les Réglages (ou
+            OBSIDIAN_VAULT_DIR dans .env).
           </p>
         )}
 
-        {!alreadyLinked && hasToken && (
+        {alreadyLinked && (
+          <p className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            Fichier cible : <code>{trip.obsidian!.carnetPath}</code>
+          </p>
+        )}
+
+        {!alreadyLinked && vaultReady && (
           <Tabs value={mode} onValueChange={(value) => setMode(value as 'create' | 'link')}>
             <TabsList>
-              <TabsTrigger value="create">Créer un nouveau projet</TabsTrigger>
               <TabsTrigger value="link">Lier à un projet existant</TabsTrigger>
+              <TabsTrigger value="create">Créer un nouveau projet</TabsTrigger>
             </TabsList>
-            <TabsContent value="create">
-              <p className="text-sm text-muted-foreground">{preview.data?.outcome}</p>
-            </TabsContent>
             <TabsContent value="link" className="grid gap-3">
               <div className="grid gap-1.5">
-                <Label htmlFor="notion-search">Rechercher dans Travel & Outdoors</Label>
+                <Label htmlFor="obsidian-search">Rechercher un projet dans Projects/</Label>
                 <Input
-                  id="notion-search"
+                  id="obsidian-search"
+                  placeholder="Ex. Road trip, Écrins…"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                 />
@@ -110,31 +118,44 @@ export function ExportDialog({ trip, onClose }: { trip: Trip; onClose: () => voi
                   {projects.error.message}
                 </p>
               )}
-              <ul className="grid max-h-40 gap-1 overflow-y-auto text-sm">
+              {projects.data?.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Aucun projet trouvé dans <code>Projects/</code>.
+                </p>
+              )}
+              <ul className="grid max-h-44 gap-1 overflow-y-auto text-sm">
                 {projects.data?.map((project) => (
-                  <li key={project.id}>
+                  <li key={project.name}>
                     <button
                       type="button"
-                      aria-pressed={projectPageId === project.id}
+                      aria-pressed={selectedProject === project.name}
                       className={cn(
-                        'w-full rounded px-2 py-1 text-left hover:bg-accent',
-                        projectPageId === project.id && 'bg-accent font-medium',
+                        'flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left hover:bg-accent',
+                        selectedProject === project.name && 'bg-accent font-medium',
                       )}
-                      onClick={() => setProjectPageId(project.id)}
+                      onClick={() => setSelectedProject(project.name)}
                     >
-                      {project.title}
+                      <span className="min-w-0 truncate">{project.name}</span>
+                      {project.area && (
+                        <Badge variant="outline" className="shrink-0 text-xs font-normal">
+                          {project.area}
+                        </Badge>
+                      )}
                     </button>
                   </li>
                 ))}
               </ul>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="notion-dates"
-                  checked={updateStartDate}
-                  onCheckedChange={(checked) => setUpdateStartDate(checked === true)}
+            </TabsContent>
+            <TabsContent value="create" className="grid gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="obsidian-project-name">Nom du nouveau projet</Label>
+                <Input
+                  id="obsidian-project-name"
+                  value={projectName}
+                  onChange={(event) => setProjectName(event.target.value)}
                 />
-                <Label htmlFor="notion-dates">Mettre à jour la propriété Start date</Label>
               </div>
+              <p className="text-sm text-muted-foreground">{preview.data?.outcome}</p>
             </TabsContent>
           </Tabs>
         )}
@@ -165,7 +186,7 @@ export function ExportDialog({ trip, onClose }: { trip: Trip; onClose: () => voi
             Fermer
           </Button>
           <Button
-            disabled={!hasToken || !request || exportTrip.isPending}
+            disabled={!vaultReady || !request || exportTrip.isPending}
             onClick={() => request && exportTrip.mutate(request)}
           >
             {alreadyLinked ? 'Remplacer le carnet' : 'Exporter'}

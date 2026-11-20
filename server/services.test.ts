@@ -73,7 +73,7 @@ describe('computeItinerary', () => {
   let trip: Trip;
 
   beforeEach(async () => {
-    dir = await mkdtemp(path.join(tmpdir(), 'trailplanner-'));
+    dir = await mkdtemp(path.join(tmpdir(), 'itinera-'));
     store = new TripStore(dir);
     const created = await store.create({
       name: 'Test',
@@ -166,33 +166,29 @@ describe('computeItinerary', () => {
 });
 
 describe('checkKeys', () => {
-  const notion = (me: () => Promise<unknown>) => ({ users: { me } }) as never;
-
   it('signale les clés manquantes sans rien appeler', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     expect(await checkKeys(undefined, undefined)).toEqual({
       ors: 'missing',
-      notion: 'missing',
+      obsidian: 'missing',
       assistant: 'missing',
       assistantProviders: [],
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('repère une clé refusée', async () => {
+  it('repère une clé ORS refusée et un vault invalide', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => json({}, 403)));
-    const refused = Object.assign(new Error('refus'), { status: 401 });
-    const result = await checkKeys('cle', notion(() => Promise.reject(refused)));
-    expect(result).toMatchObject({ ors: 'invalid', notion: 'invalid' });
+    const result = await checkKeys('cle', '/chemin/inexistant/pour-test');
+    expect(result).toMatchObject({ ors: 'invalid', obsidian: 'invalid' });
   });
 
-  it('ne déclare pas une clé invalide sur panne réseau', async () => {
+  it('ne déclare pas une clé invalide sur panne réseau et reconnaît un vault existant', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('réseau'))));
-    const down = notion(() => Promise.reject(new Error('réseau')));
-    expect(await checkKeys('cle', down, ['openai'])).toEqual({
+    expect(await checkKeys('cle', tmpdir(), ['openai'])).toEqual({
       ors: 'configured',
-      notion: 'configured',
+      obsidian: 'configured',
       assistant: 'configured',
       assistantProviders: ['openai'],
     });

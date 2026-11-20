@@ -271,12 +271,31 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
             </Select>
           </section>
 
+          <section className="grid gap-1.5">
+            <Label htmlFor="obsidian-vault">Dossier du vault Obsidian</Label>
+            <Input
+              id="obsidian-vault"
+              placeholder="/Users/…/Documents/Obsidian Vault"
+              value={draft.obsidianVaultDir ?? ''}
+              onChange={(event) =>
+                setDraft({
+                  ...draft,
+                  obsidianVaultDir: event.target.value.trim() || undefined,
+                })
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              Chemin complet du vault. Utilisé pour exporter les carnets dans <code>Projects/</code>{' '}
+              et les sorties dans <code>Sport/</code>.
+            </p>
+          </section>
+
           {health.data && (
             <section className="text-sm">
-              <h3 className="font-medium">Clés</h3>
+              <h3 className="font-medium">Services</h3>
               <p className="text-muted-foreground">
-                OpenRouteService : {KEY_STATUS[health.data.ors]} · Notion :{' '}
-                {KEY_STATUS[health.data.notion]} · Assistant :{' '}
+                OpenRouteService : {KEY_STATUS[health.data.ors]} · Obsidian :{' '}
+                {KEY_STATUS[health.data.obsidian]} · Assistant :{' '}
                 {KEY_STATUS[health.data.assistant]}
               </p>
             </section>

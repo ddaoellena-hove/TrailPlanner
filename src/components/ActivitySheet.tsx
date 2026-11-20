@@ -1,8 +1,12 @@
+import { BookOpen, Download } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
+import { ActivityObsidianDialog } from '@/components/ActivityObsidianDialog';
 import { ActivityStats, SourceBadge } from '@/components/ActivityStats';
 import { ProfileChart } from '@/components/ProfileChart';
 import { RouteLinkSection } from '@/components/RouteLinkSection';
 import { TrackMap } from '@/components/TrackMap';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Sheet,
@@ -11,8 +15,11 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { api } from '@/lib/api';
 import { useActivityTrack, useLibrary } from '@/lib/hooks';
+import { downloadJson } from '@/lib/utils';
 import { formatActivityDate, formatShortDate, formatTimeOfDay } from '../../shared/format';
+import { activityExportFileName } from '../../shared/lifeos-export';
 import { buildProfile } from '../../shared/profile';
 import type { Activity } from '../../shared/schema';
 
@@ -36,11 +43,26 @@ export function ActivitySheet({ activity, onClose }: { activity: Activity; onClo
     [linkedRoute],
   );
   const [cursor, setCursor] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [obsidianOpen, setObsidianOpen] = useState(false);
   const points = useMemo(
     () => buildProfile([{ id: activity.id, stats: { profile: activity.profile } }]),
     [activity],
   );
   const cursorPoint = cursor === null ? null : (points[cursor] ?? null);
+
+  const exportJson = async () => {
+    setExporting(true);
+    try {
+      const payload = await api.exportActivity(activity.id);
+      downloadJson(activityExportFileName(activity), payload);
+      toast.success('Contrat JSON exporté');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Export impossible');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
@@ -51,9 +73,32 @@ export function ActivitySheet({ activity, onClose }: { activity: Activity; onClo
         </SheetHeader>
 
         <div className="mt-4 grid gap-4">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <SourceBadge source={activity.source} />
-            <span>Trace enregistrée</span>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2">
+              <SourceBadge source={activity.source} />
+              <span>Trace enregistrée</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setObsidianOpen(true)}
+              >
+                <BookOpen aria-hidden />
+                Obsidian
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={exporting}
+                onClick={exportJson}
+              >
+                <Download aria-hidden />
+                Exporter JSON
+              </Button>
+            </div>
           </div>
 
           <div className="h-72 overflow-hidden rounded-lg border">
@@ -82,6 +127,13 @@ export function ActivitySheet({ activity, onClose }: { activity: Activity; onClo
 
           <RouteLinkSection activity={activity} routes={routes} />
 
+          {activity.obsidian && (
+            <p className="text-xs text-muted-foreground">
+              Obsidian : <code>{activity.obsidian.notePath}</code>
+              {activity.obsidian.projectName ? ` (projet « ${activity.obsidian.projectName} »)` : ''}
+            </p>
+          )}
+
           <p className="text-xs text-muted-foreground">
             Importée le {formatShortDate(activity.importedAt)} depuis {activity.originalFileName},{' '}
             {activity.pointCount.toLocaleString('fr-FR')} points. Le temps en mouvement n'est pas
@@ -89,6 +141,9 @@ export function ActivitySheet({ activity, onClose }: { activity: Activity; onClo
           </p>
         </div>
       </SheetContent>
+      {obsidianOpen && (
+        <ActivityObsidianDialog activity={activity} onClose={() => setObsidianOpen(false)} />
+      )}
     </Sheet>
   );
 }

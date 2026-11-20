@@ -1,5 +1,5 @@
-import type { Client } from '@notionhq/client';
 import type { AssistantProviderId, Health } from '../shared/schema';
+import { checkObsidianVault } from './obsidian';
 
 const ORS_CHECK_URL =
   'https://api.openrouteservice.org/v2/directions/driving-car?start=6.08,44.56&end=6.09,44.57';
@@ -18,26 +18,18 @@ async function checkOrs(apiKey: string | undefined): Promise<Health['ors']> {
   }
 }
 
-async function checkNotion(client: Pick<Client, 'users'> | undefined): Promise<Health['notion']> {
-  if (!client) return 'missing';
-  try {
-    await client.users.me({});
-    return 'configured';
-  } catch (error) {
-    const status = error instanceof Error && 'status' in error ? error.status : undefined;
-    return status === 401 ? 'invalid' : 'configured';
-  }
-}
-
 export async function checkKeys(
   orsApiKey: string | undefined,
-  notion: Pick<Client, 'users'> | undefined,
+  obsidianVaultDir: string | undefined,
   assistantProviders: AssistantProviderId[] = [],
 ): Promise<Health> {
-  const [ors, notionStatus] = await Promise.all([checkOrs(orsApiKey), checkNotion(notion)]);
+  const [ors, obsidian] = await Promise.all([
+    checkOrs(orsApiKey),
+    checkObsidianVault(obsidianVaultDir),
+  ]);
   return {
     ors,
-    notion: notionStatus,
+    obsidian,
     assistant: assistantProviders.length > 0 ? 'configured' : 'missing',
     assistantProviders,
   };

@@ -108,7 +108,7 @@ export type LibraryHikeFields = z.infer<typeof LibraryHikeFieldsSchema>;
 export const LibraryLinksSchema = z.record(z.string(), z.string());
 export type LibraryLinks = z.infer<typeof LibraryLinksSchema>;
 
-/** `calculated` : déduit de la trace par TrailPlanner ; `source` : lu tel quel dans le fichier. */
+/** `calculated` : déduit de la trace par Itinera ; `source` : lu tel quel dans le fichier. */
 export const MetricOriginSchema = z.enum(['calculated', 'source']);
 export type MetricOrigin = z.infer<typeof MetricOriginSchema>;
 
@@ -159,6 +159,14 @@ export const ActivitySchema = ActivityDraftSchema.extend({
   linkedRouteId: z.uuid().nullable(),
   importedAt: IsoDateTimeSchema,
   notes: z.string().optional(),
+  /** Lien vers la note exportée dans `Sport/` du vault Obsidian. */
+  obsidian: z
+    .object({
+      notePath: z.string().min(1),
+      projectName: z.string().min(1).optional(),
+      lastExportAt: IsoDateTimeSchema,
+    })
+    .optional(),
 });
 export type Activity = z.infer<typeof ActivitySchema>;
 
@@ -240,6 +248,90 @@ export const SyncStatusSchema = z.object({
 });
 export type SyncStatus = z.infer<typeof SyncStatusSchema>;
 
+/** Version du contrat JSON d'export des sorties vers le Life OS (Obsidian). */
+export const LIFE_OS_EXPORT_VERSION = 1 as const;
+
+export const ExportedPlannedRouteSchema = z.object({
+  id: z.uuid(),
+  name: z.string().min(1),
+  kind: HikeSchema.shape.kind,
+  alltrailsUrl: z.httpUrl().nullable(),
+  dogPolicy: HikeSchema.shape.dogPolicy,
+  tags: z.array(z.string()),
+  rating: z.number().int().min(1).max(5).nullable(),
+  gpxHash: z.string().min(1),
+  plannedMetrics: z.object({
+    distanceMeters: z.number().int().nonnegative(),
+    elevationGainMeters: z.number().nonnegative().nullable(),
+    elevationLossMeters: z.number().nonnegative().nullable(),
+    estimatedDurationSeconds: z.number().int().nonnegative(),
+  }),
+});
+export type ExportedPlannedRoute = z.infer<typeof ExportedPlannedRouteSchema>;
+
+export const ExportedActivitySchema = z.object({
+  id: z.uuid(),
+  title: z.string().min(1),
+  source: ActivitySourceSchema,
+  sourceId: z.string().nullable(),
+  /** Première heure de la trace telle qu'écrite dans le GPX (fuseau conservé). */
+  activityDate: z.string().nullable(),
+  /** Dernière heure de la trace telle qu'écrite dans le GPX. */
+  endedAt: z.string().nullable(),
+  /** Date et heures locales (dans `timeZone`), pratiques pour les notes Obsidian. */
+  localDate: IsoDateSchema.nullable(),
+  localStartTime: TimeSchema.nullable(),
+  localEndTime: TimeSchema.nullable(),
+  timeZone: z.string().min(1),
+  metrics: z.object({
+    distanceMeters: z.number().nonnegative(),
+    /** Durée écoulée, pauses comprises (jamais un temps en mouvement). */
+    durationSeconds: z.number().nonnegative().nullable(),
+    elevationGainMeters: z.number().nonnegative().nullable(),
+    elevationLossMeters: z.number().nonnegative().nullable(),
+    pointCount: z.number().int().positive(),
+    segmentCount: z.number().int().positive(),
+    origin: ActivityDraftSchema.shape.metricsOrigin,
+  }),
+  start: LatLngSchema,
+  end: LatLngSchema,
+  provenance: z.object({
+    originalFileName: z.string(),
+    originalFile: z.string().min(1),
+    fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+    importedAt: IsoDateTimeSchema,
+  }),
+  notes: z.string().nullable(),
+});
+export type ExportedActivity = z.infer<typeof ExportedActivitySchema>;
+
+/** Une sortie et, séparément, la rando prévue éventuellement liée (jamais fusionnées). */
+export const ActivityExportEntrySchema = z.object({
+  activity: ExportedActivitySchema,
+  plannedRoute: ExportedPlannedRouteSchema.nullable(),
+});
+export type ActivityExportEntry = z.infer<typeof ActivityExportEntrySchema>;
+
+/** Contrat JSON versionné (v1) pour une sortie enregistrée, cible Life OS Obsidian. */
+export const ActivityExportSchema = ActivityExportEntrySchema.extend({
+  version: z.literal(LIFE_OS_EXPORT_VERSION),
+  kind: z.literal('activity'),
+  target: z.literal('obsidian'),
+  exportedAt: IsoDateTimeSchema,
+});
+export type ActivityExport = z.infer<typeof ActivityExportSchema>;
+
+/** Lot JSON versionné (v1) de sorties enregistrées, de la plus récente à la plus ancienne. */
+export const ActivityExportBundleSchema = z.object({
+  version: z.literal(LIFE_OS_EXPORT_VERSION),
+  kind: z.literal('activity-export-bundle'),
+  target: z.literal('obsidian'),
+  exportedAt: IsoDateTimeSchema,
+  count: z.number().int().nonnegative(),
+  items: z.array(ActivityExportEntrySchema),
+});
+export type ActivityExportBundle = z.infer<typeof ActivityExportBundleSchema>;
+
 export const StopSchema = z.discriminatedUnion('kind', [
   z.object({
     id: z.uuid(),
@@ -320,6 +412,14 @@ export const TripSchema = z
     days: z.array(DaySchema),
     expenses: z.array(ExpenseSchema).optional(),
     checklist: z.array(ChecklistItemSchema).optional(),
+    obsidian: z
+      .object({
+        projectName: z.string().min(1),
+        carnetPath: z.string().min(1),
+        lastExportAt: IsoDateTimeSchema,
+      })
+      .optional(),
+    /** Champ hérité des voyages exportés avant l'abandon de Notion : conservé pour la lecture. */
     notion: z
       .object({
         projectPageId: z.string().optional(),
@@ -353,7 +453,7 @@ export const TripSummarySchema = z.object({
   dayCount: z.number().int().positive(),
   totalKm: z.number().nonnegative(),
   totalElevationGainM: z.number().nonnegative(),
-  lastNotionExportAt: IsoDateTimeSchema.nullable(),
+  lastExportAt: IsoDateTimeSchema.nullable(),
 });
 export type TripSummary = z.infer<typeof TripSummarySchema>;
 
@@ -444,6 +544,8 @@ export const SettingsSchema = z.object({
   activityImportFolder: z.string().min(1).optional(),
   /** Synchronisation automatique du dossier, désactivée par défaut. */
   activityAutoSync: z.boolean().optional(),
+  /** Chemin absolu du vault Obsidian (remplace OBSIDIAN_VAULT_DIR si renseigné). */
+  obsidianVaultDir: z.string().min(1).optional(),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
@@ -476,21 +578,44 @@ export const PoiSchema = z.object({
 });
 export type Poi = z.infer<typeof PoiSchema>;
 
-export const NotionExportRequestSchema = z.discriminatedUnion('mode', [
-  z.object({ mode: z.literal('create') }),
+export const ObsidianProjectSchema = z.object({
+  name: z.string().min(1),
+  path: z.string().min(1),
+  area: z.string().nullable(),
+  status: z.string().nullable(),
+});
+export type ObsidianProject = z.infer<typeof ObsidianProjectSchema>;
+
+export const ObsidianTripExportRequestSchema = z.discriminatedUnion('mode', [
+  z.object({
+    mode: z.literal('create'),
+    projectName: z.string().trim().min(1).optional(),
+  }),
   z.object({
     mode: z.literal('link'),
-    projectPageId: z.string().min(1),
-    updateStartDate: z.boolean(),
+    projectName: z.string().trim().min(1),
   }),
 ]);
-export type NotionExportRequest = z.infer<typeof NotionExportRequestSchema>;
+export type ObsidianTripExportRequest = z.infer<typeof ObsidianTripExportRequestSchema>;
 
-export const NotionProjectSchema = z.object({ id: z.string(), title: z.string() });
-export type NotionProject = z.infer<typeof NotionProjectSchema>;
+export const ObsidianTripPreviewSchema = z.object({
+  markdown: z.string(),
+  outcome: z.string(),
+  carnetTitle: z.string(),
+});
+export type ObsidianTripPreview = z.infer<typeof ObsidianTripPreviewSchema>;
 
-export const NotionPreviewSchema = z.object({ markdown: z.string(), outcome: z.string() });
-export type NotionPreview = z.infer<typeof NotionPreviewSchema>;
+export const ObsidianActivityExportRequestSchema = z.object({
+  projectName: z.string().trim().min(1).nullable().optional(),
+});
+export type ObsidianActivityExportRequest = z.infer<typeof ObsidianActivityExportRequestSchema>;
+
+export const ObsidianActivityPreviewSchema = z.object({
+  fileName: z.string().min(1),
+  relativePath: z.string().min(1),
+  markdown: z.string(),
+});
+export type ObsidianActivityPreview = z.infer<typeof ObsidianActivityPreviewSchema>;
 
 export const DEFAULT_SETTINGS: Settings = {
   pace: { flatKmh: 4, ascentMPerH: 300, descentMPerH: 500, breakFactor: 1 },
@@ -501,7 +626,7 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export const HealthSchema = z.object({
   ors: z.enum(['configured', 'missing', 'invalid']),
-  notion: z.enum(['configured', 'missing', 'invalid']),
+  obsidian: z.enum(['configured', 'missing', 'invalid']),
   assistant: z.enum(['configured', 'missing']),
   assistantProviders: z.array(AssistantProviderIdSchema),
 });

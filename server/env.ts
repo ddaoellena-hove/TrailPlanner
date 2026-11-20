@@ -14,9 +14,7 @@ export const env = {
   openChargeMapKey: process.env.OPENCHARGEMAP_API_KEY || undefined,
   openaiApiKey: process.env.OPENAI_API_KEY || undefined,
   openaiModel: process.env.OPENAI_MODEL || undefined,
-  notionToken: process.env.NOTION_TOKEN || undefined,
-  notionDataSourceId: process.env.NOTION_PROJECTS_DATA_SOURCE_ID || undefined,
-  notionAreaPageId: process.env.NOTION_AREA_TRAVEL_PAGE_ID || undefined,
+  obsidianVaultDir: process.env.OBSIDIAN_VAULT_DIR || undefined,
   tripsDir: path.resolve(rootDir, process.env.TRIPS_DIR || './trips'),
   settingsFile: path.resolve(rootDir, process.env.SETTINGS_FILE || './settings.json'),
 };

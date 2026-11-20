@@ -68,4 +68,4 @@
 - **Priorité 2** : Mettre en place un gestionnaire d'erreur centralisé dans `server/`.
 - **Priorité 3** : Implémenter des tests pour les fichiers `shared/`.
 
-> ✅ *Rapport sauvegardé dans le fichier : [AUDIT.MD](file:///Users/ddaoellena/PlanTrails/AUDIT.MD)*
+> ✅ *Rapport sauvegardé dans le fichier : [AUDIT.MD](AUDIT.MD)*

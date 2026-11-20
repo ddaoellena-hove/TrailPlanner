@@ -40,7 +40,7 @@ describe('synchronisation automatique', () => {
   let sync: ActivitySync;
 
   beforeEach(async () => {
-    dir = await mkdtemp(path.join(tmpdir(), 'trailplanner-auto-'));
+    dir = await mkdtemp(path.join(tmpdir(), 'itinera-auto-'));
     folder = path.join(dir, 'exports');
     await mkdir(folder);
     const file = path.join(folder, 'matin.gpx');

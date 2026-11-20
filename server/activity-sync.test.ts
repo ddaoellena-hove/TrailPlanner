@@ -34,7 +34,7 @@ describe('synchronisation depuis un dossier', () => {
   };
 
   beforeEach(async () => {
-    tripsDir = await mkdtemp(path.join(tmpdir(), 'trailplanner-sync-'));
+    tripsDir = await mkdtemp(path.join(tmpdir(), 'itinera-sync-'));
     folder = path.join(tripsDir, 'exports-alltrails');
     await mkdir(folder);
     store = new ActivityStore(tripsDir);

@@ -18,7 +18,7 @@ export function AppHeader() {
       <div className="mx-auto flex h-14 max-w-[1600px] items-center justify-between px-6">
         <Link to="/" className="flex items-center gap-2 font-semibold">
           <Logo className="h-4.5 w-6 text-primary" />
-          TrailPlanner
+          Itinera
         </Link>
         <div className="flex items-center gap-1">
           <Button asChild variant="ghost" size="sm">

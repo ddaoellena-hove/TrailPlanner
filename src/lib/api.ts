@@ -3,6 +3,10 @@ import type { Proposal } from '../../shared/plan-impact';
 import { ProposalSchema } from '../../shared/plan-impact';
 import {
   type Activity,
+  type ActivityExport,
+  type ActivityExportBundle,
+  ActivityExportBundleSchema,
+  ActivityExportSchema,
   type ActivityPreview,
   ActivityPreviewSchema,
   ActivitySchema,
@@ -33,13 +37,16 @@ import {
   LibraryLinksSchema,
   type NewOuting,
   type NewTrip,
+  type ObsidianActivityExportRequest,
+  type ObsidianActivityPreview,
+  ObsidianActivityPreviewSchema,
+  type ObsidianProject,
+  ObsidianProjectSchema,
+  type ObsidianTripExportRequest,
+  type ObsidianTripPreview,
+  ObsidianTripPreviewSchema,
   type Poi,
   PoiSchema,
-  type NotionExportRequest,
-  type NotionPreview,
-  NotionPreviewSchema,
-  type NotionProject,
-  NotionProjectSchema,
   type Settings,
   SettingsSchema,
   type Trip,
@@ -160,6 +167,14 @@ export const api = {
       .parse(await response.json());
   },
 
+  async exportActivity(id: string): Promise<ActivityExport> {
+    return ActivityExportSchema.parse(await (await request(`/activities/${id}/export`)).json());
+  },
+
+  async exportActivities(): Promise<ActivityExportBundle> {
+    return ActivityExportBundleSchema.parse(await (await request('/activities/export')).json());
+  },
+
   async syncStatus(): Promise<SyncStatus> {
     return SyncStatusSchema.parse(await (await request('/activities/sync')).json());
   },
@@ -240,13 +255,13 @@ export const api = {
     return HealthSchema.parse(await (await request('/health')).json());
   },
 
-  async notionPreview(slug: string): Promise<NotionPreview> {
-    const response = await request(`/trips/${slug}/notion/preview`, { method: 'POST' });
-    return NotionPreviewSchema.parse(await response.json());
+  async obsidianTripPreview(slug: string): Promise<ObsidianTripPreview> {
+    const response = await request(`/trips/${slug}/obsidian/preview`, { method: 'POST' });
+    return ObsidianTripPreviewSchema.parse(await response.json());
   },
 
-  async notionExport(slug: string, body: NotionExportRequest): Promise<Trip> {
-    const response = await request(`/trips/${slug}/notion/export`, {
+  async obsidianTripExport(slug: string, body: ObsidianTripExportRequest): Promise<Trip> {
+    const response = await request(`/trips/${slug}/obsidian/export`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
@@ -254,9 +269,33 @@ export const api = {
     return TripSchema.parse(await response.json());
   },
 
-  async notionProjects(query: string): Promise<NotionProject[]> {
-    const response = await request(`/notion/projects?q=${encodeURIComponent(query)}`);
-    return z.array(NotionProjectSchema).parse(await response.json());
+  async obsidianActivityPreview(
+    id: string,
+    body: ObsidianActivityExportRequest,
+  ): Promise<ObsidianActivityPreview> {
+    const response = await request(`/activities/${id}/obsidian/preview`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return ObsidianActivityPreviewSchema.parse(await response.json());
+  },
+
+  async obsidianActivityExport(
+    id: string,
+    body: ObsidianActivityExportRequest,
+  ): Promise<Activity> {
+    const response = await request(`/activities/${id}/obsidian/export`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return ActivitySchema.parse(await response.json());
+  },
+
+  async obsidianProjects(query: string): Promise<ObsidianProject[]> {
+    const response = await request(`/obsidian/projects?q=${encodeURIComponent(query)}`);
+    return z.array(ObsidianProjectSchema).parse(await response.json());
   },
 
   async chargingStations(slug: string, minKw: number): Promise<ChargingSearch> {
