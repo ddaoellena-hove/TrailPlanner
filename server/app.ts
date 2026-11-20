@@ -29,6 +29,7 @@ import { ActivityNotFoundError, ActivityStore, DuplicateActivityError } from './
 import { ConnectorError, FolderConnector } from './activity-connector';
 import { ActivitySync, SyncError } from './activity-sync';
 import { suggestRoutes } from '../shared/activity';
+import { buildActivityExport, buildActivityExportBundle } from '../shared/lifeos-export';
 import { AutoSync } from './auto-sync';
 import { GpxError, MAX_GPX_BYTES, parseGpx, parseRecordedGpx } from './gpx';
 import { MapLinkError, resolveMapLink } from './map-link';
@@ -216,6 +217,15 @@ export function createApp({
 
   app.get('/api/activities', async (c) => c.json(await activities.list()));
 
+  /** Contrat JSON versionné (v1) de toutes les sorties pour le Life OS (lecture seule). */
+  app.get('/api/activities/export', async (c) =>
+    c.json(
+      buildActivityExportBundle(await activities.list(), await library.list(), {
+        exportedAt: new Date().toISOString(),
+      }),
+    ),
+  );
+
   /** Dossier surveillé, réglé dans les réglages ; sans lui, rien n'est lu. */
   const syncFolder = async (): Promise<FolderConnector> => {
     const folder = (await settings.read()).activityImportFolder;
@@ -283,6 +293,15 @@ export function createApp({
   app.get('/api/activities/:id/route-suggestions', async (c) =>
     c.json(suggestRoutes(await activities.get(c.req.param('id')), await library.list())),
   );
+
+  /** Contrat JSON versionné (v1) d'une sortie pour le Life OS (lecture seule). */
+  app.get('/api/activities/:id/export', async (c) => {
+    const activity = await activities.get(c.req.param('id'));
+    const route = activity.linkedRouteId
+      ? (await library.list()).find(({ id }) => id === activity.linkedRouteId)
+      : null;
+    return c.json(buildActivityExport(activity, route, { exportedAt: new Date().toISOString() }));
+  });
 
   // L'id ne sert qu'à chercher dans l'index, jamais à construire un chemin disque.
   app.get('/api/activities/:id', async (c) => c.json(await activities.get(c.req.param('id'))));

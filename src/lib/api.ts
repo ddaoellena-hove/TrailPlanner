@@ -3,6 +3,10 @@ import type { Proposal } from '../../shared/plan-impact';
 import { ProposalSchema } from '../../shared/plan-impact';
 import {
   type Activity,
+  type ActivityExport,
+  type ActivityExportBundle,
+  ActivityExportBundleSchema,
+  ActivityExportSchema,
   type ActivityPreview,
   ActivityPreviewSchema,
   ActivitySchema,
@@ -158,6 +162,14 @@ export const api = {
     return z
       .array(z.object({ routeId: z.string(), share: z.number() }))
       .parse(await response.json());
+  },
+
+  async exportActivity(id: string): Promise<ActivityExport> {
+    return ActivityExportSchema.parse(await (await request(`/activities/${id}/export`)).json());
+  },
+
+  async exportActivities(): Promise<ActivityExportBundle> {
+    return ActivityExportBundleSchema.parse(await (await request('/activities/export')).json());
   },
 
   async syncStatus(): Promise<SyncStatus> {

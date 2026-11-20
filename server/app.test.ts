@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { northboundPoints, recordedGpx } from '../shared/recorded-gpx.fixture';
 import {
   type Activity,
+  ActivityExportBundleSchema,
+  ActivityExportSchema,
   type ActivityPreview,
   DEFAULT_SETTINGS,
   type Hike,
@@ -584,6 +586,60 @@ describe('API voyages', () => {
       const unlinked = await put(`/api/activities/${activity.id}/link`, { routeId: null });
       expect(await unlinked.json()).toEqual(activity);
       expect((await put(`/api/activities/${crypto.randomUUID()}/link`, { routeId: null })).status).toBe(404);
+    });
+  });
+
+  describe('contrat d’export Life OS', () => {
+    it('exporte une sortie et le lot complet en JSON versionné v1 sans rien écrire', async () => {
+      const empty = await request('/api/activities/export');
+      expect(empty.status).toBe(200);
+      expect(ActivityExportBundleSchema.parse(await empty.json())).toMatchObject({
+        version: 1,
+        kind: 'activity-export-bundle',
+        target: 'obsidian',
+        count: 0,
+        items: [],
+      });
+      expect((await request(`/api/activities/${crypto.randomUUID()}/export`)).status).toBe(404);
+
+      const trace = recordedGpx([northboundPoints(25)], { name: 'Col du Festre' });
+      const { slug } = await createTrip();
+      await uploadGpx(slug, trace);
+      const [route] = (await (await request('/api/library')).json()) as LibraryHike[];
+
+      const form = new FormData();
+      form.set('file', new File([trace], 'col-festre.gpx'));
+      const activity = (await (
+        await request('/api/activities', { method: 'POST', body: form })
+      ).json()) as Activity;
+
+      // Sans lien : plannedRoute vaut null.
+      const unlinked = ActivityExportSchema.parse(
+        await (await request(`/api/activities/${activity.id}/export`)).json(),
+      );
+      expect(unlinked.version).toBe(1);
+      expect(unlinked.target).toBe('obsidian');
+      expect(unlinked.activity.id).toBe(activity.id);
+      expect(unlinked.plannedRoute).toBeNull();
+
+      // Avec lien manuel : la rando prévue est exportée séparément.
+      await request(`/api/activities/${activity.id}/link`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ routeId: route!.id }),
+      });
+      const linked = ActivityExportSchema.parse(
+        await (await request(`/api/activities/${activity.id}/export`)).json(),
+      );
+      expect(linked.plannedRoute?.id).toBe(route!.id);
+      expect(linked.plannedRoute?.name).toBe(route!.name);
+
+      const bundle = ActivityExportBundleSchema.parse(
+        await (await request('/api/activities/export')).json(),
+      );
+      expect(bundle.count).toBe(1);
+      expect(bundle.items[0]!.activity.id).toBe(activity.id);
+      expect(bundle.items[0]!.plannedRoute?.id).toBe(route!.id);
     });
   });
 });

@@ -148,6 +148,23 @@ test('lier une sortie à la rando prévue qu’elle a suivie', async ({ page }) 
   await expect(section.getByRole('columnheader', { name: 'Prévu' })).toBeVisible();
   await expect(section.getByRole('columnheader', { name: 'Réalisé' })).toBeVisible();
 
+  // Contrat d'export JSON (v1, cible Obsidian) : télécharge la sortie et sa rando liée séparément.
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    sheet.getByRole('button', { name: 'Exporter JSON' }).click(),
+  ]);
+  expect(download.suggestedFilename()).toBe('2026-11-14-voltaire-avec-remi.lifeos.json');
+  const exportedPath = await download.path();
+  expect(exportedPath).not.toBeNull();
+  const exported = JSON.parse(await readFile(exportedPath!, 'utf8'));
+  expect(exported).toMatchObject({
+    version: 1,
+    kind: 'activity',
+    target: 'obsidian',
+    activity: { title: 'Voltaire avec Rémi', localDate: '2026-11-14', localStartTime: '13:37' },
+    plannedRoute: { name: 'Sur les traces de Voltaire' },
+  });
+
   // La rando prévue compte comme faite et renvoie vers la sortie.
   await page.goto('/randos');
   const card = page.getByRole('button', { name: /Sur les traces de Voltaire/ });

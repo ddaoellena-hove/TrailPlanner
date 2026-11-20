@@ -160,3 +160,15 @@ As approved in D2/D3:
 - The route sheet lists its linked recordings, each opening `/sorties?sortie=<id>`.
 - Fix found while checking: a map created in an opening panel was framed for the wrong size; it now re-frames on load and resize until the user moves it.
 - Note: a planned route and its recording can show different D+ for the same ground, because routes use the 5 m threshold (DEM elevations) and recordings 2 m (GPS elevations).
+
+## 9. Phase 5 — delivered (2026-11-20, branch `feat/activities-lifeos-export`)
+
+Versioned Life OS export contract targeting **Obsidian**, strictly read-only (no write to Obsidian or Notion):
+- **Schemas** in `shared/schema.ts`: `ActivityExportSchema` (`version: 1`, `kind: 'activity'`, `target: 'obsidian'`) and `ActivityExportBundleSchema` (`version: 1`, `kind: 'activity-export-bundle'`, `target: 'obsidian'`).
+- **Pure builders** in `shared/lifeos-export.ts` (`buildActivityExport`, `buildActivityExportBundle`, `activityExportFileName`, `activityBundleExportFileName`), unit-tested in `shared/lifeos-export.test.ts`:
+  - Preserves raw ISO timestamps (`activityDate`, `endedAt`) alongside local `Europe/Paris` fields (`localDate`, `localStartTime`, `localEndTime`) for Obsidian note naming and daily notes.
+  - Keeps SI units (metres, seconds) throughout, marks every metric's origin (`calculated` / `source` / `null`), and leaves unknown values `null` (never fabricated).
+  - Keeps `plannedRoute` strictly separate from `activity` (included only when `linkedRouteId` matches a library route; `null` if unlinked or if the route was deleted).
+- **Read-only API** in `server/app.ts`: `GET /api/activities/export` and `GET /api/activities/:id/export`, covered in `server/app.test.ts`.
+- **UI**: « Exporter JSON » download buttons in `ActivitiesPage` (full bundle) and `ActivitySheet` (single activity).
+- **Follow-up (optional direct Obsidian writer)**: still requires the vault path and one existing activity note with its YAML front matter so nothing about the vault's schema is guessed.
