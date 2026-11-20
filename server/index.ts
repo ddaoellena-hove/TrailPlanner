@@ -6,6 +6,7 @@ import { env } from './env';
 import { checkKeys } from './health';
 import { anthropicProvider } from './assistant-anthropic';
 import { openaiProvider } from './assistant-openai';
+import { DuckDbCatalogSource } from './catalog-reader';
 
 const assistants = [
   ...(env.anthropicApiKey
@@ -25,6 +26,7 @@ const app = createApp({
   orsApiKey: env.orsApiKey,
   openChargeMapKey: env.openChargeMapKey,
   obsidianVaultDir: env.obsidianVaultDir,
+  catalog: new DuckDbCatalogSource(env.catalogPath),
   health: () =>
     (health ??= checkKeys(
       env.orsApiKey,

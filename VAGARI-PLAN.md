@@ -72,14 +72,13 @@ Livrable : `data-pipeline/` autonome, sans toucher à l'application.
 - Derrière l'interface existante (`server/routing.ts`) : ORS puis IGN restent en repli, hors région notamment.
 - **Démo :** isochrone de 45 min autour d'une origine ; trajets d'un voyage existant recalculés en local.
 
-## Phase 3 — Moteur de découverte (2–3 semaines)
+## Phase 3 — Moteur de découverte (livrée le 20 novembre 2026, branche `feat/v3-discovery-engine`)
 
-- `DiscoveryQuerySchema` et `SuggestionResult` dans `shared/schema.ts`.
-- Pipeline **pur et testé** dans `shared/discovery/` : filtre (isochrone, contraintes dures : chien, D+, bitume) → score pondéré par l'intention → diversification MMR.
-- Explication : facteurs positifs, compromis, incertitudes (`DOG_ACCESS_UNKNOWN`, etc.), provenance (snapshot, sources).
-- Nouveauté : déduite de « Mes sorties » (déjà faites = pénalisées).
-- Route `POST /api/discover` ; table `suggestion_feedback`.
+- `DiscoveryQuerySchema`, `SuggestionResultSchema`, `DiscoveryResponseSchema` et `SuggestionFeedbackSchema` dans `shared/schema.ts`.
+- Pipeline **pur et testé** dans `shared/discovery/` (`filter`, `novelty`, `score`, `mmr`, `explain`, `index`) : filtre dur (isochrone ou rayon estimé, chien sans filtrer sur `unknown`, D+, durée, bitume, boucles) → nouveauté déduite de « Mes sorties » et `suggestion_feedback` → score pondéré par l'intention → diversification MMR → explication factuelle et provenance.
+- Lecture en cache du catalogue DuckDB (`server/catalog-reader.ts`, repli rayon si isochrone IGN hors ligne), table SQLite `suggestion_feedback` (`server/feedback-store.ts`), routes `POST /api/discover`, `GET /api/discover/feedback`, `POST /api/discover/feedback`.
 - **Aucun LLM** dans ce chemin.
+- **Démo de fin :** 10 suggestions expliquées et diversifiées pour Rouen depuis `catalog_v0.duckdb` (`server/discover.test.ts`).
 
 ## Phase 4 — Escapades, Découvrir et Préparer (3–4 semaines)
 

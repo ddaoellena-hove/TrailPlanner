@@ -87,6 +87,7 @@ trips/      données utilisateur
 | Horaires et soleil | `shared/schedule.ts`, `shared/sun.ts`, `shared/totals.ts` |
 | Alertes | `shared/alerts.ts` |
 | Carnet et export | `shared/carnet.ts`, `shared/obsidian.ts`, `server/obsidian.ts` |
+| Découverte (V3) | `shared/discovery/` (filtre, nouveauté, score, MMR, explications), `server/catalog-reader.ts`, `server/feedback-store.ts` |
 | Vue voyage | `src/pages/TripPage.tsx` |
 | Assistant | `shared/assistant-ops.ts`, `shared/plan-impact.ts`, `server/assistant.ts`, et par fournisseur `server/assistant-anthropic.ts`, `server/assistant-openai.ts` |
 
@@ -110,6 +111,8 @@ Les données utilisateur (voyages, caches trajets/POI, bibliothèque, sorties en
 | GET | `/api/obsidian/projects?q=` | liste les projets de `Projects/` du vault (`Travel & Outdoors` en tête) |
 | POST | `/api/trips/:slug/obsidian/preview` | aperçu Markdown du carnet de voyage |
 | POST | `/api/trips/:slug/obsidian/export` | crée ou lie un projet dans `Projects/` et écrit le sous-fichier carnet |
+| POST | `/api/discover` | 1 à 30 suggestions de boucles expliquées et diversifiées (MMR, sans LLM) depuis le catalogue DuckDB |
+| GET/POST | `/api/discover/feedback` | liste ou enregistre un avis (`saved`, `liked`, `dismissed`) dans `suggestion_feedback` |
 | GET | `/api/activities/sync` | dossier surveillé, dernier passage, fichiers en attente d'un choix |
 | POST | `/api/activities/sync` | importe les nouveaux GPX du dossier ; renvoie importés, doublons, en attente, échecs |
 | POST | `/api/activities/sync/decisions` | `{ hash, action: "import" \| "ignore" }` pour un doublon probable en attente |
