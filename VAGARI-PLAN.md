@@ -25,11 +25,10 @@ Effort total estimé : **16 à 24 semaines** pour une personne à plein temps (m
 
 ## Phase 0 — Test des données (2–3 semaines) · go / no-go
 
-> **État au 20 novembre 2026 :** pipeline complet avec étape 4b (boucles générées sur le réseau OSM,
-> stratification H3 rés. 5) et seuil d'hystérésis D+ à 2 m (`CATALOG_HYSTERESIS_M = 2`).
-> **B1, B3, B4 et B5 sont tous OK** : Rouen 207 · Le Havre 31 · Évreux 160 boucles de 5–15 km ;
-> D+ à −2 % (Voltaire) et −3 % (Crevon) ; construction 46 s / requête max 15 ms ; 0 violation B5 sur
-> 629 itinéraires. **Seul B2 attend les avis de David** (`npm run catalog:review`) pour la décision go / no-go.
+> **Verdict GO (20 novembre 2026) :** tous les benchmarks **B1 à B5 sont OK** — Rouen 207 ·
+> Le Havre 31 · Évreux 160 boucles de 5–15 km ; **B2 = 100 % « J'irais » (60/60 avis)** ;
+> D+ à −2 % (Voltaire) et −3 % (Crevon) ; construction 46 s / requête max 6 ms ; 0 violation B5
+> sur 629 itinéraires (265 relations OSM + 364 boucles générées). Phase 0 validée → feu vert pour V1.
 
 **But :** savoir si OSM + MNT donnent des suggestions de randos que David ferait vraiment.
 

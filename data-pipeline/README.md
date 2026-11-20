@@ -48,9 +48,9 @@ Catalogue : 629 itinéraires (265 relations OSM + 364 boucles générées), 19 0
 | # | Résultat | Seuil | Verdict |
 | --- | --- | --- | --- |
 | B1 | Rouen 207 · Le Havre 31 · Évreux 160 boucles de 5–15 km à ≤ 45 min | ≥ 30 par origine | **OK** |
-| B2 | — | ≥ 60 % « J'irais » | **En attente** des avis de David |
+| B2 | **100 % « J'irais »** (60 / 60 avis : Rouen 20/20, Le Havre 20/20, Évreux 20/20) | ≥ 60 % « J'irais » | **OK (GO)** |
 | B3 | Distance : 0 % d'écart sur les deux GPX. D+ : Voltaire −2 % (83 vs 85 m), Crevon −3 % (164 vs 169 m) | ± 5 % / ± 15 % | **OK** |
-| B4 | Construction 46 s (étape 03, 7 requêtes IGN) / ≈ 10 min (à froid complet) ; requête ≤ 15 ms | < 30 min / < 500 ms | **OK** |
+| B4 | Construction 46 s (étape 03, 7 requêtes IGN) / ≈ 10 min (à froid complet) ; requête ≤ 6 ms | < 30 min / < 500 ms | **OK** |
 | B5 | 0 inconnue non signalée sur 629 itinéraires | 100 % | **OK** |
 
 **Ce que ça dit :**
@@ -65,5 +65,5 @@ Catalogue : 629 itinéraires (265 relations OSM + 364 boucles générées), 19 0
    « avec chien » ne pourra que signaler l'incertitude, jamais filtrer, sauf autre source.
 4. **Revêtement : 48 % des itinéraires incomplets**, surtout des `highway=track` sans `surface` ni
    `tracktype`. Les traiter comme « non goudronné probable » reste un choix à valider.
-5. **Prochaine étape :** recueillir les avis B2 via `npm run catalog:review` (`http://127.0.0.1:5176`)
-   pour statuer go / no-go.
+5. **Verdict GO :** les 60 premières boucles (20 par origine, dont 54 boucles générées et 6 relations
+   OSM) ont toutes été validées par David — feu vert pour enchaîner sur V1 (socle SQLite).
