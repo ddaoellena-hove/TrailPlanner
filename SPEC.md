@@ -1,4 +1,4 @@
-# SPEC — TrailPlanner : planificateur local de road trip rando
+# SPEC — Itinera : planificateur local de road trip rando
 
 > Version 1.0 — 2 novembre 2026 — Auteur : David Dao-Ellena
 > Destinataire : Claude Code. Ce document est la source de vérité fonctionnelle. En cas de doute, demander plutôt que supposer.
@@ -334,8 +334,8 @@ Voir §8.
 
 ### Règle de non-écrasement (critique)
 Les pages projet contiennent du contenu écrit à la main (objectif, réglementation, checklist…). **L'outil ne modifie jamais le contenu d'une page projet existante.** Il écrit exclusivement dans une **sous-page dédiée** qu'il possède :
-`🗺️ Carnet d'itinéraire — généré par TrailPlanner`
-À chaque export, le contenu de cette sous-page est entièrement remplacé.
+`🗺️ Carnet d’itinéraire — généré par Itinera`
+À chaque export, le contenu de cette sous-page est entièrement remplacé. Une sous-page portant un titre des anciens noms de l'outil (« … généré par Trailplan », « … généré par TrailPlanner ») est reprise et renommée, jamais dupliquée.
 
 ### Flux
 1. Dialog : « Créer un nouveau projet » ou « Lier à un projet existant » (recherche dans `Projects` filtrée sur Area = Travel & Outdoors).
@@ -351,7 +351,7 @@ Les pages projet contiennent du contenu écrit à la main (objectif, réglementa
 3. Une section `## J1 — titre` par jour : timeline (trajets avec durée, randos avec stats et lien AllTrails), nuit (lien, statut de réservation), replis.
 4. `## Hébergements` : tableau nom / nuits / prix / statut / chiens / lien.
 5. `## Points à vérifier` : to-do Notion générés à partir des alertes warning/error.
-6. Pied : « Généré automatiquement par TrailPlanner — ne pas éditer cette page, elle est remplacée à chaque export. »
+6. Pied : « Généré automatiquement par Itinera — ne pas éditer cette page, elle est remplacée à chaque export. »
 
 ### Technique
 - `@notionhq/client` avec la version d'API qui supporte les data sources (parent = `data_source_id`). Vérifier la version courante dans la doc Notion.
@@ -447,7 +447,7 @@ Chaque jalon : tests unitaires des calculs touchés, lint et typecheck verts, RE
 ---
 
 ## 12. Questions ouvertes (à valider avec David, ne pas trancher seul)
-1. ~~Nom définitif de l'outil.~~ Tranché par David : TrailPlanner.
+1. ~~Nom définitif de l'outil.~~ Tranché par David : TrailPlanner, renommé Itinera le 20 novembre 2026.
 2. Fournir 3 GPX AllTrails de référence + leurs valeurs affichées (distance, D+) pour `fixtures/`.
 3. Faut-il aussi relier les randos à la base `Resources` du Life OS ? (Supposé : non en V1.)
 
