@@ -1,12 +1,14 @@
 /**
- * Étape 03 : boucles de référence à partir des relations OSM d'itinéraires
- * pédestres (route=hiking|foot|walking). Les boucles générées (plan, 4b) ne
- * sont tentées que si la couverture B1 est insuffisante.
+ * Étape 03 : boucles de référence.
+ * - 4a : relations OSM d'itinéraires pédestres (route=hiking|foot|walking) ;
+ * - 4b : boucles générées sur le réseau de chemins OSM dans les secteurs peu couverts
+ *        par les relations balisées, marquées `source_type = 'generated_loop'`.
  */
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { DuckDBConnection } from '@duckdb/node-api';
 import {
+  CATALOG_HYSTERESIS_M,
   chainSegments,
   decimate,
   densify,
@@ -20,6 +22,12 @@ import {
   type DogAccess,
 } from '../shared/catalog';
 import { computeHikeStats, detectKind } from '../shared/gpx';
+import {
+  buildWalkGraph,
+  fastDistanceKm,
+  findLoopsFromSeed,
+  type TrailWayInput,
+} from '../shared/loop-generator';
 import { DEFAULT_SETTINGS, type LatLng } from '../shared/schema';
 import { DATA_DIR, H3_RESOLUTION, TRAIL_ELEVATION_MAX_KM, TRAIL_ELEVATION_STEP_KM } from './config';
 import { rows, sqlString } from './lib/duck';
@@ -33,9 +41,30 @@ type MemberRow = {
   length_km: number;
 };
 
+type WalkWayRow = {
+  id: number;
+  tags: unknown;
+  geojson: string;
+};
+
+type SeedCellRow = {
+  stratum: string;
+  center_lat: number;
+  center_lon: number;
+  quality: number;
+};
+
+type PlaceRow = {
+  name: string | null;
+  category: string;
+  lat: number;
+  lon: number;
+};
+
 type StagedTrail = {
   trail_id: string;
-  osm_relation_id: number;
+  osm_relation_id: number | null;
+  source_type: 'osm_relation' | 'generated_loop';
   name: string | null;
   network: string | null;
   kind: string;
@@ -56,6 +85,13 @@ type StagedTrail = {
 /** Échantillon tous les ~100 m pour moyenner les scores des cellules traversées. */
 const SCORE_SAMPLE_KM = 0.1;
 
+/** Paramètres de sélection régionale stratifiée (par tuile H3 rés. 5 ≈ 250 km²) pour l'étape 4b. */
+const STRATA_H3_RESOLUTION = 5;
+const MAX_SEEDS_PER_STRATUM = 16;
+const SEED_MIN_SPACING_KM = 2.2;
+const RELATION_EXCLUSION_KM = 1.6;
+const GENERATED_MIDPOINT_SPACING_KM = 1.7;
+
 const toWkt = (points: LatLng[]) =>
   `LINESTRING(${points.map((p) => `${p.lng.toFixed(6)} ${p.lat.toFixed(6)}`).join(', ')})`;
 
@@ -64,6 +100,188 @@ const mapToRecord = (value: unknown): Record<string, string> => {
   if (!Array.isArray(value)) return {};
   return Object.fromEntries((value as { key: string; value: string }[]).map((e) => [e.key, e.value]));
 };
+
+function formatGeneratedName(placeName: string | null, index: number): string {
+  if (!placeName) return `Boucle rurale #${index}`;
+  const trimmed = placeName.trim();
+  const vowel = /^[aeiouyhàâäéèêëîïôöùûü]/i.test(trimmed);
+  return vowel ? `Boucle autour d’${trimmed}` : `Boucle autour de ${trimmed}`;
+}
+
+async function generateNetworkLoops(
+  db: DuckDBConnection,
+  elevation: ElevationService,
+  existingLoopCenters: LatLng[],
+): Promise<{ staged: StagedTrail[]; samples: string[]; elevationPoints: number }> {
+  // 1. Graines stratifiées par tuile H3 rés. 5 : garantit une couverture homogène entre
+  //    zones très boisées (Eure) et plateaux / littoral (Pays de Caux) sans sur-représenter un secteur.
+  const cells = await rows<SeedCellRow>(
+    db,
+    `SELECT h3_cell_to_parent(h3_index, ${STRATA_H3_RESOLUTION})::VARCHAR AS stratum,
+            center_lat, center_lon,
+            0.55 * scenic_score + 0.35 * isolation_score + 0.10 * heritage_score AS quality
+     FROM h3_cells
+     WHERE (scenic_score >= 0.08 OR heritage_score >= 0.20) AND isolation_score >= 0.12
+     ORDER BY quality DESC`,
+  );
+
+  const selectedCells: LatLng[] = [];
+  const countByStratum = new Map<string, number>();
+  for (const cell of cells) {
+    const stratumCount = countByStratum.get(cell.stratum) ?? 0;
+    if (stratumCount >= MAX_SEEDS_PER_STRATUM) continue;
+    const pt = { lat: cell.center_lat, lng: cell.center_lon };
+    if (existingLoopCenters.some((c) => fastDistanceKm(pt, c) < RELATION_EXCLUSION_KM)) continue;
+    if (selectedCells.some((c) => fastDistanceKm(pt, c) < SEED_MIN_SPACING_KM)) continue;
+    selectedCells.push(pt);
+    countByStratum.set(cell.stratum, stratumCount + 1);
+  }
+
+  if (selectedCells.length === 0) return { staged: [], samples: [], elevationPoints: 0 };
+
+  // 2. Lieux de départ et de nommage (parkings, villages, patrimoine, points de vue).
+  const places = await rows<PlaceRow>(
+    db,
+    `SELECT name, category, lat, lon FROM places
+     WHERE category IN ('parking', 'trailhead', 'village', 'heritage', 'viewpoint')`,
+  );
+  const parkingPlaces = places.filter((p) => p.category === 'parking' || p.category === 'trailhead');
+  const namedPlaces = places.filter(
+    (p) => p.name && (p.category === 'village' || p.category === 'heritage' || p.category === 'viewpoint'),
+  );
+
+  const nearestIn = (pt: LatLng, list: PlaceRow[], maxKm: number): PlaceRow | null => {
+    let best: PlaceRow | null = null;
+    let bestD = maxKm;
+    for (const p of list) {
+      const d = fastDistanceKm(pt, { lat: p.lat, lng: p.lon });
+      if (d < bestD) {
+        bestD = d;
+        best = p;
+      }
+    }
+    return best;
+  };
+
+  // 3. Graphe pédestre régional (hors voies privées ou interdites aux piétons).
+  const wayRows = await rows<WalkWayRow>(
+    db,
+    `SELECT id, tags, ST_AsGeoJSON(geom) AS geojson
+     FROM ways
+     WHERE tags['highway'] IN (
+       'path', 'track', 'footway', 'bridleway', 'cycleway', 'steps',
+       'pedestrian', 'living_street', 'unclassified', 'residential', 'service'
+     )
+       AND coalesce(tags['access'], 'yes') NOT IN ('private', 'no')
+       AND coalesce(tags['foot'], 'yes') NOT IN ('private', 'no')
+       AND coalesce(tags['area'], 'no') <> 'yes'`,
+  );
+
+  const wayInputs: TrailWayInput[] = wayRows.map((row) => {
+    const tags = mapToRecord(row.tags);
+    const coords = (JSON.parse(row.geojson) as { coordinates: [number, number][] }).coordinates.map(
+      ([lng, lat]) => ({ lat, lng }),
+    );
+    return {
+      id: Number(row.id),
+      coords,
+      highway: tags.highway ?? 'path',
+      surface: waySurface(tags),
+      dog: dogAccess(tags.dog),
+    };
+  });
+
+  const graph = buildWalkGraph(wayInputs);
+  console.log(
+    `  étape 4b : graphe ${graph.nodes.length} nœuds (${wayInputs.length} voies), ${selectedCells.length} graines`,
+  );
+
+  const accepted: {
+    loop: ReturnType<typeof findLoopsFromSeed>[number];
+    dense: LatLng[];
+    name: string;
+    trailId: string;
+  }[] = [];
+  const acceptedMidpoints: LatLng[] = [];
+  let seq = 0;
+
+  for (const cell of selectedCells) {
+    const anchor =
+      nearestIn(cell, parkingPlaces, 1.5) ?? nearestIn(cell, namedPlaces, 2.0);
+    const seedPoint = anchor ? { lat: anchor.lat, lng: anchor.lon } : cell;
+    const loops = findLoopsFromSeed(graph, seedPoint, {
+      minKm: 5.5,
+      maxKm: 14.5,
+      targetKm: 9.5,
+      maxPavedRatio: 0.48,
+      maxOverlapRatio: 0.18,
+      maxSnapKm: 0.6,
+      maxLoops: 2,
+    });
+    for (const loop of loops) {
+      if (acceptedMidpoints.some((m) => fastDistanceKm(m, loop.midpoint) < GENERATED_MIDPOINT_SPACING_KM)) {
+        continue;
+      }
+      if (existingLoopCenters.some((c) => fastDistanceKm(c, loop.midpoint) < RELATION_EXCLUSION_KM)) {
+        continue;
+      }
+      acceptedMidpoints.push(loop.midpoint);
+      seq++;
+      const labelPlace =
+        nearestIn(loop.points[0]!, namedPlaces, 3.0) ??
+        nearestIn(loop.midpoint, namedPlaces, 3.5);
+      accepted.push({
+        loop,
+        dense: densify(loop.points, TRAIL_ELEVATION_STEP_KM),
+        name: formatGeneratedName(labelPlace?.name ?? null, seq),
+        trailId: `gen-${String(seq).padStart(3, '0')}`,
+      });
+    }
+  }
+
+  // Un seul lot d'appels altimétriques (5 000 pts/requête) pour toutes les boucles générées.
+  const allPoints = accepted.flatMap((a) => a.dense);
+  console.log(`  étape 4b : ${accepted.length} boucles retenues, altitudes de ${allPoints.length} points…`);
+  const allAltitudes = await elevation.altitudes(allPoints);
+
+  const staged: StagedTrail[] = [];
+  const samples: string[] = [];
+  let offset = 0;
+  for (const { loop, dense, name, trailId } of accepted) {
+    const altitudes = allAltitudes.slice(offset, offset + dense.length);
+    offset += dense.length;
+    const stats = computeHikeStats(
+      dense.map((p, i) => ({ ...p, altM: altitudes[i] ?? null })),
+      DEFAULT_SETTINGS.pace,
+      CATALOG_HYSTERESIS_M,
+    );
+    staged.push({
+      trail_id: trailId,
+      osm_relation_id: null,
+      source_type: 'generated_loop',
+      name,
+      network: null,
+      kind: 'loop',
+      distance_m: Math.round(stats.distanceKm * 1000),
+      elevation_gain_m: stats.elevationGainM,
+      elevation_loss_m: stats.elevationLossM,
+      estimated_duration_min: stats.estimatedDurationMin,
+      paved_ratio: loop.pavedRatio,
+      surface_unknown_ratio: loop.surfaceUnknownRatio,
+      gap_km: 0,
+      dog_policy: trailDogPolicy('unknown', loop.dogWays),
+      restricted_ways: 0,
+      start_lat: loop.points[0]!.lat,
+      start_lon: loop.points[0]!.lng,
+      geom_wkt: toWkt(decimate(dense, 5)),
+    });
+    for (const p of densify(loop.points, SCORE_SAMPLE_KM)) {
+      samples.push(JSON.stringify({ trail_id: trailId, lat: p.lat, lng: p.lng }));
+    }
+  }
+
+  return { staged, samples, elevationPoints: allPoints.length };
+}
 
 export async function extractTrails(db: DuckDBConnection, elevation: ElevationService): Promise<void> {
   const members = (
@@ -84,6 +302,7 @@ export async function extractTrails(db: DuckDBConnection, elevation: ElevationSe
 
   const staged: StagedTrail[] = [];
   const samples: string[] = [];
+  const existingLoopCenters: LatLng[] = [];
   let elevationPoints = 0;
 
   for (const [relId, relMembers] of byRelation) {
@@ -102,6 +321,7 @@ export async function extractTrails(db: DuckDBConnection, elevation: ElevationSe
     const stats = computeHikeStats(
       dense.map((p, i) => ({ ...p, altM: altitudes[i] ?? null })),
       DEFAULT_SETTINGS.pace,
+      CATALOG_HYSTERESIS_M,
     );
 
     const shares = surfaceShares(relMembers.map((m) => ({ lengthKm: m.length_km, surface: waySurface(m.tags) })));
@@ -113,15 +333,22 @@ export async function extractTrails(db: DuckDBConnection, elevation: ElevationSe
     // Une relation `roundtrip=yes` reste une boucle même si son tracé assemblé ne se referme pas.
     const detected = detectKind(chain.points.map((p) => ({ ...p, altM: null })));
     const kind = relTags.roundtrip === 'yes' && detected === 'point-to-point' ? 'loop' : detected;
+    const distanceM = Math.round(Math.max(0, stats.distanceKm - chain.gapKm) * 1000);
+
+    if (distanceM >= 5000 && distanceM <= 15000) {
+      const mid = chain.points[Math.floor(chain.points.length / 2)]!;
+      existingLoopCenters.push(chain.points[0]!, mid);
+    }
 
     const trailId = `osm-rel-${relId}`;
     staged.push({
       trail_id: trailId,
       osm_relation_id: relId,
+      source_type: 'osm_relation',
       name: relTags.name ?? relTags.ref ?? null,
       network: relTags.network ?? null,
       kind,
-      distance_m: Math.round(Math.max(0, stats.distanceKm - chain.gapKm) * 1000),
+      distance_m: distanceM,
       elevation_gain_m: stats.elevationGainM,
       elevation_loss_m: stats.elevationLossM,
       estimated_duration_min: stats.estimatedDurationMin,
@@ -138,8 +365,12 @@ export async function extractTrails(db: DuckDBConnection, elevation: ElevationSe
       samples.push(JSON.stringify({ trail_id: trailId, lat: p.lat, lng: p.lng }));
     }
   }
+  console.log(`  étape 4a : ${staged.length} relations OSM, altitudes de ${elevationPoints} points`);
+
+  const generated = await generateNetworkLoops(db, elevation, existingLoopCenters);
+  staged.push(...generated.staged);
+  samples.push(...generated.samples);
   await elevation.save();
-  console.log(`  ${staged.length} itinéraires, altitudes de ${elevationPoints} points`);
 
   // Moyennes des scores, réserves traversées et départ le plus proche, en SQL.
   const stagedFile = path.join(DATA_DIR, 'trails_staged.ndjson');
@@ -204,7 +435,6 @@ export async function extractTrails(db: DuckDBConnection, elevation: ElevationSe
         pavedRatio: t.paved_ratio,
         gapKm: t.gap_km,
       }),
-      source_type: 'osm_relation',
     });
   });
   const finalFile = path.join(DATA_DIR, 'reference_trails.ndjson');

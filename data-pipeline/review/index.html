@@ -153,9 +153,13 @@
       el.id = t.trail_id;
       el.onclick = (e) => { if (!e.target.closest('button, select, a')) select(t.trail_id, false); };
       const bar = (label, v) => `<div class="bar">${label} ${nf.format(v * 100)} %<span><i style="width:${Math.round(v * 100)}%"></i></span></div>`;
+      const sourceTag = t.source_type === 'generated_loop' ? 'générée OSM' : 'balisée OSM';
+      const osmLink = t.osm_relation_id
+        ? `<a href="https://www.openstreetmap.org/relation/${t.osm_relation_id}" target="_blank" rel="noopener">OSM ↗</a>`
+        : `<span class="stats">réseau OSM</span>`;
       el.innerHTML = `
         <h2><span class="rank">${i + 1}.</span> ${t.name ?? 'Sans nom'}</h2>
-        <div class="stats">${KIND[t.kind] ?? t.kind} · ${nf.format(t.distance_m / 1000)} km · D+ ${t.elevation_gain_m ?? '?'} m · ${duration(t.estimated_duration_min)} · bitume ${Math.round(t.paved_ratio * 100)} %</div>
+        <div class="stats">${KIND[t.kind] ?? t.kind} · ${sourceTag} · ${nf.format(t.distance_m / 1000)} km · D+ ${t.elevation_gain_m ?? '?'} m · ${duration(t.estimated_duration_min)} · bitume ${Math.round(t.paved_ratio * 100)} %</div>
         <div class="bars">${bar('Paysage', t.scenic_avg)}${bar('Isolement', t.isolation_avg)}${bar('Patrimoine', t.heritage_avg)}</div>
         <div class="flags">${t.uncertainties.map((u) => `<span class="flag">${UNCERTAINTY[u] ?? u}</span>`).join('')}</div>
         <div class="actions">
@@ -164,7 +168,7 @@
           <select ${r?.verdict === 'no' ? '' : 'hidden'} aria-label="Raison">
             <option value="">Raison…</option>${REASONS.map((x) => `<option ${r?.reason === x ? 'selected' : ''}>${x}</option>`).join('')}
           </select>
-          <a href="https://www.openstreetmap.org/relation/${t.osm_relation_id}" target="_blank" rel="noopener">OSM ↗</a>
+          ${osmLink}
         </div>`;
       const [yesB, noB] = el.querySelectorAll('button');
       const select_ = el.querySelector('select');

@@ -13,6 +13,14 @@ import type { LatLng } from './schema';
 /** Écart toléré entre deux tronçons consécutifs d'une relation, en km. */
 export const CHAIN_JOIN_KM = 0.02;
 
+/**
+ * Seuil d'hystérésis du D+/D− pour le catalogue (IGN RGE ALTI), identique au seuil
+ * calibré sur les sorties enregistrées (`RECORDED_HYSTERESIS_M = 2`) : en plaine
+ * normande, 5 m sous-estime le D+ de −16 % sur Voltaire ; 2 m donne −2 % et −3 %
+ * sur les deux fixtures réelles.
+ */
+export const CATALOG_HYSTERESIS_M = 2;
+
 export type ChainResult = { points: LatLng[]; gapKm: number; gaps: number };
 
 /**

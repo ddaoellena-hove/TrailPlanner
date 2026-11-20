@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { parseRecordedGpx } from '../../server/gpx';
-import { densify } from '../../shared/catalog';
+import { CATALOG_HYSTERESIS_M, densify } from '../../shared/catalog';
 import { computeHikeStats } from '../../shared/gpx';
 import { DEFAULT_SETTINGS } from '../../shared/schema';
 import {
@@ -82,6 +82,7 @@ for (const fixture of FIXTURES) {
   const stats = computeHikeStats(
     points.map((p, i) => ({ ...p, altM: altitudes[i] ?? null })),
     DEFAULT_SETTINGS.pace,
+    CATALOG_HYSTERESIS_M,
   );
   const distanceError = Math.abs(stats.distanceKm - fixture.distanceKm) / fixture.distanceKm;
   const gainError = stats.elevationGainM === null ? 1 : Math.abs(stats.elevationGainM - fixture.gainM) / fixture.gainM;

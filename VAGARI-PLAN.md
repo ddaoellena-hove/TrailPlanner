@@ -18,18 +18,18 @@ Effort total estimé : **16 à 24 semaines** pour une personne à plein temps (m
 | Région pilote | non précisée | **Haute-Normandie** (Seine-Maritime + Eure) | Fixtures réelles déjà là (Vallée du Crevon), connue de David pour juger |
 | MNT | SRTM / RGE ALTI | **IGN RGE ALTI 5 m** (ouvert), repli Copernicus GLO-30 | Précision et cohérence avec les fonds IGN |
 | Fonds de carte | PMTiles local | **IGN en ligne conservé**, PMTiles OSM ajouté pour le hors-ligne | Les fonds IGN restent les meilleurs en ligne |
-| Export Notion | absent | **Conservé** tel quel | Rien dans Vagari ne le remplace |
+| Export Obsidian | absent | **Conservé** tel quel (remplace Notion depuis le 20 nov. 2026) | Rien dans Vagari ne le remplace |
 | Règles CLAUDE.md | — | **Toutes conservées** (pas de scraping AllTrails, GPX immuables, calculs purs dans `shared/`, une phase = une branche + une PR) | Compatibles avec la spec |
 
 ---
 
 ## Phase 0 — Test des données (2–3 semaines) · go / no-go
 
-> **État au 18 novembre 2026 :** pipeline en place (`data-pipeline/`, voir son README). B4 et B5 OK ;
-> B1 OK pour Rouen seulement (85 boucles), échec pour Le Havre (12) et Évreux (4) faute de relations
-> OSM dans l'Eure ; B3 échoue de justesse sur le D+ (−16 % sur Voltaire, distance exacte) ;
-> **B2 attend les avis de David** (`npm run catalog:review`). Prochaines étapes : 4b (boucles générées),
-> seuil de D+ à 2–3 m, puis décision go / no-go.
+> **État au 20 novembre 2026 :** pipeline complet avec étape 4b (boucles générées sur le réseau OSM,
+> stratification H3 rés. 5) et seuil d'hystérésis D+ à 2 m (`CATALOG_HYSTERESIS_M = 2`).
+> **B1, B3, B4 et B5 sont tous OK** : Rouen 207 · Le Havre 31 · Évreux 160 boucles de 5–15 km ;
+> D+ à −2 % (Voltaire) et −3 % (Crevon) ; construction 46 s / requête max 15 ms ; 0 violation B5 sur
+> 629 itinéraires. **Seul B2 attend les avis de David** (`npm run catalog:review`) pour la décision go / no-go.
 
 **But :** savoir si OSM + MNT donnent des suggestions de randos que David ferait vraiment.
 

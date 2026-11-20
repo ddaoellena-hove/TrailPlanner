@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CATALOG_HYSTERESIS_M,
   cellScores,
   chainSegments,
   decimate,
@@ -14,7 +15,8 @@ import {
   waySurface,
   type CellFeatures,
 } from './catalog';
-import { distanceKm } from './gpx';
+import { computeHikeStats, distanceKm } from './gpx';
+import { DEFAULT_SETTINGS } from './schema';
 
 const p = (lng: number, lat: number) => ({ lat, lng });
 
@@ -206,5 +208,16 @@ describe('provisionalTrailScore', () => {
     const plain = provisionalTrailScore(trail);
     expect(provisionalTrailScore({ ...trail, pavedRatio: 0.5 })).toBeCloseTo(plain - 0.2, 5);
     expect(provisionalTrailScore({ ...trail, gapKm: 1 })).toBeCloseTo(plain - 0.2, 5);
+  });
+});
+
+describe('CATALOG_HYSTERESIS_M', () => {
+  it('conserve les petites bosses de plaine (3 m) ignorées par le seuil de 5 m', () => {
+    const altitudes = [100, 103.5, 100, 103.5, 100];
+    const points = altitudes.map((altM, i) => ({ lat: 49 + i * 0.002, lng: 1, altM }));
+    const atDefault = computeHikeStats(points, DEFAULT_SETTINGS.pace);
+    const atCatalog = computeHikeStats(points, DEFAULT_SETTINGS.pace, CATALOG_HYSTERESIS_M);
+    expect(atDefault.elevationGainM).toBe(0);
+    expect(atCatalog.elevationGainM).toBe(7);
   });
 });

@@ -22,7 +22,7 @@ const db = await openCatalog(CATALOG_PATH, true);
 
 const VerdictInput = z.object({
   originId: z.enum(ORIGINS.map((o) => o.id) as [string, ...string[]]),
-  trailId: z.string().regex(/^osm-rel-\d+$/),
+  trailId: z.string().regex(/^(osm-rel-\d+|gen-\d+)$/),
   verdict: z.enum(['yes', 'no']).nullable(),
   reason: z.string().max(200).optional(),
 });

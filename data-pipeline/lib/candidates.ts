@@ -37,7 +37,8 @@ export async function isochrone(origin: Origin): Promise<string> {
 
 export type Candidate = {
   trail_id: string;
-  osm_relation_id: number;
+  osm_relation_id: number | null;
+  source_type: string;
   name: string | null;
   kind: string;
   distance_m: number;
@@ -59,7 +60,7 @@ export async function candidatesFor(db: DuckDBConnection, origin: Origin, limit?
   const zone = await isochrone(origin);
   return rows<Candidate>(
     db,
-    `SELECT trail_id, osm_relation_id, name, kind, distance_m, elevation_gain_m, estimated_duration_min,
+    `SELECT trail_id, osm_relation_id, source_type, name, kind, distance_m, elevation_gain_m, estimated_duration_min,
             paved_ratio, scenic_avg, isolation_avg, heritage_avg, provisional_score, difficulty, dog_policy,
             uncertainties, ST_AsGeoJSON(geom) AS geojson
      FROM reference_trails
