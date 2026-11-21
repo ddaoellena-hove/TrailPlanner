@@ -92,6 +92,15 @@ export interface SuggestionFeedbackTable {
   created_at: string;
 }
 
+export interface EscapadesTable {
+  id: string;
+  title: string;
+  trail_id: string;
+  data: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ItineraDatabase {
   meta: MetaTable;
   settings: SettingsTable;
@@ -103,6 +112,7 @@ export interface ItineraDatabase {
   activity_sync: ActivitySyncTable;
   gpx_vault: GpxVaultTable;
   suggestion_feedback: SuggestionFeedbackTable;
+  escapades: EscapadesTable;
 }
 
 export const DB_FILE_NAME = 'itinera.db';
@@ -186,6 +196,14 @@ const SCHEMA_STATEMENTS = [
     verdict TEXT NOT NULL,
     reason TEXT,
     created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS escapades (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    trail_id TEXT NOT NULL,
+    data TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
   )`,
 ];
 

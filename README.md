@@ -47,6 +47,7 @@ L'e2e écrit dans `.e2e-trips/` et neutralise `OBSIDIAN_VAULT_DIR`, `ORS_API_KEY
 
 ## Fonctionnalités
 
+- **Découvrir & Préparer (`/decouvrir`) :** recherche de boucles autour d'un point de départ (adresse, raccourcis ou clic sur la carte) selon la route max, la distance, le chien, le bitume, le D+ et l'intention (paysage, calme, patrimoine, nouveauté), bouton « Surprends-moi », explications factuelles et incertitudes, assemblage d'une escapade avec étape bonus (< 15 min de détour) et chronologie porte-à-porte, sauvegarde dans SQLite (« Mes escapades ») et ajout en un clic dans un voyage existant (GPX immuable + bibliothèque + étape bonus).
 - **Voyages :** création, duplication, corbeille dans `trips/.trash`. Nom, dates, chien, voiture électrique, départ et arrivée se modifient directement dans la page.
 - **Randos :** import de plusieurs GPX, fiche complète, remplacement du tracé sans perdre le planning. Le GPX original n'est jamais modifié.
 - **Mes randos :** bibliothèque commune aux voyages, alimentée par les imports : recherche, filtres, carte, notes, sorties réalisées, comparaison du prévu au réel et ajustement du rythme en un clic. Une rando s'ajoute à un voyage par copie.
@@ -87,7 +88,7 @@ trips/      données utilisateur
 | Horaires et soleil | `shared/schedule.ts`, `shared/sun.ts`, `shared/totals.ts` |
 | Alertes | `shared/alerts.ts` |
 | Carnet et export | `shared/carnet.ts`, `shared/obsidian.ts`, `server/obsidian.ts` |
-| Découverte (V3) | `shared/discovery/` (filtre, nouveauté, score, MMR, explications), `server/catalog-reader.ts`, `server/feedback-store.ts` |
+| Découverte & escapades (V3–V4) | `shared/discovery/`, `shared/escapade.ts`, `server/catalog-reader.ts`, `server/feedback-store.ts`, `server/escapade-store.ts`, `src/pages/DiscoverPage.tsx` |
 | Vue voyage | `src/pages/TripPage.tsx` |
 | Assistant | `shared/assistant-ops.ts`, `shared/plan-impact.ts`, `server/assistant.ts`, et par fournisseur `server/assistant-anthropic.ts`, `server/assistant-openai.ts` |
 
@@ -112,7 +113,10 @@ Les données utilisateur (voyages, caches trajets/POI, bibliothèque, sorties en
 | POST | `/api/trips/:slug/obsidian/preview` | aperçu Markdown du carnet de voyage |
 | POST | `/api/trips/:slug/obsidian/export` | crée ou lie un projet dans `Projects/` et écrit le sous-fichier carnet |
 | POST | `/api/discover` | 1 à 30 suggestions de boucles expliquées et diversifiées (MMR, sans LLM) depuis le catalogue DuckDB |
+| GET | `/api/discover/bonus-stops` | étapes bonus (< 15 min de détour) issues de la table `places` du catalogue autour d'une boucle |
 | GET/POST | `/api/discover/feedback` | liste ou enregistre un avis (`saved`, `liked`, `dismissed`) dans `suggestion_feedback` |
+| GET/POST/PUT/DELETE | `/api/escapades` (`/:id`) | liste, crée, met à jour ou supprime une escapade assemblée dans SQLite |
+| POST | `/api/escapades/:id/add-to-trip` | importe la boucle GPX (et l'étape bonus éventuelle) dans un jour d'un voyage existant |
 | GET | `/api/activities/sync` | dossier surveillé, dernier passage, fichiers en attente d'un choix |
 | POST | `/api/activities/sync` | importe les nouveaux GPX du dossier ; renvoie importés, doublons, en attente, échecs |
 | POST | `/api/activities/sync/decisions` | `{ hash, action: "import" \| "ignore" }` pour un doublon probable en attente |

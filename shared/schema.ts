@@ -741,3 +741,77 @@ export const SuggestionFeedbackSchema = NewSuggestionFeedbackSchema.extend({
   createdAt: IsoDateTimeSchema,
 });
 export type SuggestionFeedback = z.infer<typeof SuggestionFeedbackSchema>;
+
+/** Catégorie d'une étape bonus issue du catalogue OSM (`places`). */
+export const BonusStopCategorySchema = z.enum([
+  'viewpoint',
+  'heritage',
+  'village',
+  'water',
+  'peak',
+]);
+export type BonusStopCategory = z.infer<typeof BonusStopCategorySchema>;
+
+/** Étape bonus (< 15 min de détour) assemblable à une escapade. */
+export const BonusStopSchema = z.object({
+  placeId: z.string().min(1),
+  name: z.string().min(1),
+  category: BonusStopCategorySchema,
+  location: LatLngSchema,
+  detourMin: z.number().nonnegative(),
+  detourKm: z.number().nonnegative(),
+  distanceFromTrailKm: z.number().nonnegative(),
+  attribution: z.string().min(1),
+});
+export type BonusStop = z.infer<typeof BonusStopSchema>;
+
+/** Tronçon de la chronologie porte-à-porte d'une escapade. */
+export const EscapadeTimelineItemSchema = z.object({
+  kind: z.enum(['origin', 'approach', 'anchor', 'bonus-drive', 'bonus-visit', 'return']),
+  label: z.string().min(1),
+  startMin: z.number().int().nonnegative(),
+  endMin: z.number().int().nonnegative(),
+  durationMin: z.number().int().nonnegative(),
+  distanceKm: z.number().nonnegative().optional(),
+});
+export type EscapadeTimelineItem = z.infer<typeof EscapadeTimelineItemSchema>;
+
+export const EscapadeOriginSchema = z.object({
+  name: z.string().trim().min(1),
+  location: LatLngSchema,
+});
+export type EscapadeOrigin = z.infer<typeof EscapadeOriginSchema>;
+
+/** Corps de POST/PUT /api/escapades : la chronologie est recalculée de façon déterministe. */
+export const NewEscapadeSchema = z.object({
+  title: z.string().trim().min(1, 'Titre requis'),
+  origin: EscapadeOriginSchema,
+  startTime: TimeSchema.default('09:00'),
+  suggestion: SuggestionResultSchema,
+  bonusStop: BonusStopSchema.nullable().default(null),
+  bonusDurationMin: z.number().int().min(10).max(240).default(45),
+  notes: z.string().trim().max(2000).optional(),
+});
+export type NewEscapade = z.infer<typeof NewEscapadeSchema>;
+
+export const EscapadeSchema = NewEscapadeSchema.extend({
+  id: z.uuid(),
+  timeline: z.array(EscapadeTimelineItemSchema),
+  totalDriveMin: z.number().int().nonnegative(),
+  totalDurationMin: z.number().int().nonnegative(),
+  createdAt: IsoDateTimeSchema,
+  updatedAt: IsoDateTimeSchema,
+});
+export type Escapade = z.infer<typeof EscapadeSchema>;
+
+export const AddEscapadeToTripRequestSchema = z.object({
+  tripSlug: SlugSchema,
+  dayIndex: z.number().int().positive().default(1),
+});
+export type AddEscapadeToTripRequest = z.infer<typeof AddEscapadeToTripRequestSchema>;
+
+export const AddEscapadeToTripResponseSchema = z.object({
+  trip: TripSchema,
+  hike: HikeSchema,
+});
+export type AddEscapadeToTripResponse = z.infer<typeof AddEscapadeToTripResponseSchema>;

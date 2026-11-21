@@ -1,13 +1,15 @@
 import { existsSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { DuckDBInstance } from '@duckdb/node-api';
-import type { DogAccess, UncertaintyCode } from '../shared/catalog';
+import { popularity, type DogAccess, type UncertaintyCode } from '../shared/catalog';
 import type { CatalogMeta, CatalogTrail, IsochronePolygon } from '../shared/discovery';
-import type { LatLng } from '../shared/schema';
+import type { CatalogPlace } from '../shared/escapade';
+import { BonusStopCategorySchema, type LatLng } from '../shared/schema';
 
 export type LoadedCatalog = {
   meta: CatalogMeta;
   trails: CatalogTrail[];
+  places?: CatalogPlace[];
 };
 
 export interface CatalogSource {
@@ -44,6 +46,18 @@ type RawMetaRow = {
   snapshot_id: string;
   region_name: string;
   dem_source: string;
+};
+
+type RawPlaceRow = {
+  place_id: string;
+  name: string;
+  category: string;
+  lat: number;
+  lon: number;
+  wikidata: string | null;
+  wikipedia: string | null;
+  heritage: string | null;
+  source_attribution: string | null;
 };
 
 function toArray(value: unknown): string[] {
@@ -144,7 +158,32 @@ export class DuckDbCatalogSource implements CatalogSource {
         };
       });
 
-      const data: LoadedCatalog = { meta, trails };
+      const placeReader = await conn.runAndReadAll(`
+        SELECT place_id, name, category, lat, lon, wikidata, wikipedia, heritage, source_attribution
+        FROM places
+        WHERE name IS NOT NULL AND trim(name) <> ''
+          AND category IN ('viewpoint', 'heritage', 'village', 'water', 'peak')
+      `);
+      const rawPlaces = placeReader.getRowObjectsJS() as RawPlaceRow[];
+      const places: CatalogPlace[] = [];
+      for (const p of rawPlaces) {
+        const parsedCategory = BonusStopCategorySchema.safeParse(p.category);
+        if (!parsedCategory.success) continue;
+        places.push({
+          placeId: p.place_id,
+          name: p.name.trim(),
+          category: parsedCategory.data,
+          location: { lat: p.lat, lng: p.lon },
+          popularity: popularity({
+            wikidata: p.wikidata ?? undefined,
+            wikipedia: p.wikipedia ?? undefined,
+            heritage: p.heritage ?? undefined,
+          }),
+          attribution: p.source_attribution ?? '© OpenStreetMap contributors (ODbL)',
+        });
+      }
+
+      const data: LoadedCatalog = { meta, trails, places };
       this.cached = { mtimeMs: info.mtimeMs, data };
       return data;
     } finally {

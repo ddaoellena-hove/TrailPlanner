@@ -22,6 +22,9 @@ export function AppHeader() {
         </Link>
         <div className="flex items-center gap-1">
           <Button asChild variant="ghost" size="sm">
+            <Link to="/decouvrir">Découvrir</Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
             <Link to="/randos">Mes randos</Link>
           </Button>
           <Button asChild variant="ghost" size="sm">

@@ -8,6 +8,7 @@ import { AppHeader } from '@/components/AppHeader';
 import { TripPage } from '@/pages/TripPage';
 import { LibraryPage } from '@/pages/LibraryPage';
 import { ActivitiesPage } from '@/pages/ActivitiesPage';
+import { DiscoverPage } from '@/pages/DiscoverPage';
 import { TripsPage } from '@/pages/TripsPage';
 import './index.css';
 
@@ -21,6 +22,7 @@ createRoot(document.getElementById('root')!).render(
           <AppHeader />
           <Routes>
             <Route path="/" element={<TripsPage />} />
+            <Route path="/decouvrir" element={<DiscoverPage />} />
             <Route path="/voyages/:slug" element={<TripPage />} />
             <Route path="/randos" element={<LibraryPage />} />
             <Route path="/sorties" element={<ActivitiesPage />} />

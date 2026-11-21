@@ -80,13 +80,13 @@ Livrable : `data-pipeline/` autonome, sans toucher à l'application.
 - **Aucun LLM** dans ce chemin.
 - **Démo de fin :** 10 suggestions expliquées et diversifiées pour Rouen depuis `catalog_v0.duckdb` (`server/discover.test.ts`).
 
-## Phase 4 — Escapades, Découvrir et Préparer (3–4 semaines)
+## Phase 4 — Escapades, Découvrir et Préparer (livrée le 20 novembre 2026, branche `feat/v4-escapades-ui`)
 
-- Assemblage : origine → approche → ancre (boucle) → étape bonus (< 15 min de détour) → retour, avec timeline porte-à-porte.
-- Espace **Découvrir** : carte, filtres d'intention, « Surprends-moi ».
-- Espace **Préparer** : fiche escapade, incertitudes, sauvegarde, variantes.
-- Lien avec l'existant : une escapade enregistrée peut devenir une étape d'un voyage (voir question 4).
-- Mise en page adaptative : panneaux latéraux sur ordinateur, panneaux bas sur mobile.
+- Assemblage pur (`shared/escapade.ts`, testé dans `shared/escapade.test.ts`) : origine → approche → ancre (boucle) → étape bonus (< 15 min de détour, piochée dans `places` du catalogue DuckDB) → retour, avec chronologie porte-à-porte déterministe et sérialisation GPX 1.1.
+- Stockage SQLite dans la table `escapades` (`server/escapade-store.ts`), routes `GET /api/discover/bonus-stops`, CRUD `/api/escapades` et passerelle `POST /api/escapades/:id/add-to-trip` (copie GPX immuable dans le voyage + bibliothèque + ajout de l'étape bonus en POI).
+- Espace **Découvrir & Préparer** (`/decouvrir`, `src/pages/DiscoverPage.tsx`) : carte MapLibre interactive, filtres d'intention et contraintes, bouton « Surprends-moi », avis `liked`/`dismissed`, fiche **Préparer** (chronologie porte-à-porte, étapes bonus < 15 min, variantes, incertitudes, provenance, notes, sauvegarde) et onglet **Mes escapades**.
+- Mise en page adaptative : carte collée à droite sur ordinateur, carte en haut et panneaux empilés sur mobile.
+- **Démo de fin :** escapade assemblée avec étape bonus, enregistrée dans SQLite et ajoutée à un voyage (`e2e/discover.spec.ts` + `server/escapades.test.ts`).
 
 ## Phase 5 — Journal (1 semaine)
 
